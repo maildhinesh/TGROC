@@ -5,10 +5,11 @@ import { prisma } from "@/lib/db";
 
 const MGMT_ROLES = ["ADMIN", "OFFICE_BEARER"];
 
-// GET /api/events — public list (published) or management list (?manage=1)
+// GET /api/events — public list (published) or management list (?manage=1) or member view (?member=1)
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const manage = searchParams.get("manage") === "1";
+  const member = searchParams.get("member") === "1";
 
   if (manage) {
     const session = await getServerSession(authOptions);
@@ -25,6 +26,50 @@ export async function GET(req: NextRequest) {
       },
     });
     return NextResponse.json({ events });
+  }
+
+  if (member) {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userEmail = session.user.email as string;
+    const rawEvents = await prisma.event.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { eventDate: "asc" },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        eventDate: true,
+        venue: true,
+        posterUrl: true,
+        rsvps: {
+          where: { email: userEmail },
+          select: { attending: true, guestCount: true },
+          take: 1,
+        },
+      },
+    });
+    // Flatten rsvp to a single object per event
+    const eventsWithRsvp = rawEvents.map((ev: {
+      id: string;
+      name: string;
+      description: string | null;
+      eventDate: Date;
+      venue: string;
+      posterUrl: string | null;
+      rsvps: { attending: string; guestCount: number }[];
+    }) => ({
+      id: ev.id,
+      name: ev.name,
+      description: ev.description,
+      eventDate: ev.eventDate,
+      venue: ev.venue,
+      posterUrl: ev.posterUrl,
+      rsvp: ev.rsvps[0] ?? null,
+    }));
+    return NextResponse.json({ events: eventsWithRsvp });
   }
 
   // Public: only published events, upcoming first

@@ -20,7 +20,16 @@ export async function GET(
       createdBy: {
         select: { profile: { select: { firstName: true, lastName: true } } },
       },
-      _count: { select: { rsvps: { where: { attending: "YES" } } } },
+      _count: {
+        select: {
+          rsvps: { where: { attending: "YES" } },
+          performances: true,
+        },
+      },
+      items: {
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: { id: true, name: true, description: true, quantityNeeded: true, sortOrder: true },
+      },
     },
   });
 
@@ -46,7 +55,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { name, description, eventDate, venue, status } = body;
+  const { name, description, eventDate, venue, status, performanceRegOpen, performanceRegDeadline } = body;
 
   const event = await prisma.event.update({
     where: { id },
@@ -56,6 +65,10 @@ export async function PATCH(
       ...(eventDate && { eventDate: new Date(eventDate) }),
       ...(venue && { venue: venue.trim() }),
       ...(status && { status }),
+      ...(performanceRegOpen !== undefined && { performanceRegOpen }),
+      ...(performanceRegDeadline !== undefined && {
+        performanceRegDeadline: performanceRegDeadline ? new Date(performanceRegDeadline) : null,
+      }),
     },
   });
 

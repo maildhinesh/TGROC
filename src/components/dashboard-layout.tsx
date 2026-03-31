@@ -47,6 +47,7 @@ function getNavItems(role: string): NavItem[] {
   }
   return [
     { href: "/member", label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
+    { href: "/member/events", label: "Events", icon: <CalendarDays className="w-5 h-5" /> },
     { href: "/member/profile", label: "Profile", icon: <UserCircle className="w-5 h-5" /> },
     { href: "/member/contact", label: "Contact Info", icon: <MapPin className="w-5 h-5" /> },
     { href: "/member/notifications", label: "Notifications", icon: <Bell className="w-5 h-5" /> },

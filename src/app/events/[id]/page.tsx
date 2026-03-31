@@ -2,7 +2,28 @@
 
 import { useState, useEffect, use } from "react";
 import { useSession } from "next-auth/react";
-import { Calendar, Clock, MapPin, Users, CheckCircle } from "lucide-react";
+import { Calendar, Clock, MapPin, Users, CheckCircle, Music, DollarSign } from "lucide-react";
+
+interface EventItem {
+  id: string;
+  name: string;
+  description: string | null;
+  quantityNeeded: number;
+}
+
+interface EventPricing {
+  isFree: boolean;
+  feeType: "FAMILY" | "INDIVIDUAL" | null;
+  memberFamilyFee: string | null;
+  nonMemberFamilyFee: string | null;
+  memberAdultFee: string | null;
+  nonMemberAdultFee: string | null;
+  memberKidFee: string | null;
+  nonMemberKidFee: string | null;
+  studentMemberFee: string | null;
+  studentNonMemberFee: string | null;
+  notes: string | null;
+}
 
 interface Event {
   id: string;
@@ -10,7 +31,11 @@ interface Event {
   description: string | null;
   eventDate: string;
   venue: string;
+  posterUrl: string | null;
   status: string;
+  performanceRegOpen: boolean;
+  performanceRegDeadline: string | null;
+  items: EventItem[];
   _count: { rsvps: number };
 }
 
@@ -19,6 +44,7 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
   const { data: session } = useSession();
 
   const [event, setEvent] = useState<Event | null>(null);
+  const [pricing, setPricing] = useState<EventPricing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -27,20 +53,27 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [attending, setAttending] = useState("YES");
-  const [guestCount, setGuestCount] = useState(1);
+  const [adultCount, setAdultCount] = useState(1);
+  const [kidCount, setKidCount] = useState(0);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // itemId -> quantity selected by this RSVP
+  const [itemSelections, setItemSelections] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    fetch(`/api/events/${id}`)
-      .then((r) => {
-        if (!r.ok) { setNotFound(true); setIsLoading(false); return null; }
-        return r.json();
-      })
-      .then((data) => {
-        if (data) { setEvent(data.event); setIsLoading(false); }
+    Promise.all([
+      fetch(`/api/events/${id}`),
+      fetch(`/api/events/${id}/pricing`),
+    ])
+      .then(async ([evRes, pricingRes]) => {
+        if (!evRes.ok) { setNotFound(true); setIsLoading(false); return; }
+        const evData = await evRes.json();
+        const pricingData = pricingRes.ok ? await pricingRes.json() : {};
+        setEvent(evData.event);
+        setPricing(pricingData.pricing ?? null);
+        setIsLoading(false);
       })
       .catch(() => { setNotFound(true); setIsLoading(false); });
   }, [id]);
@@ -66,8 +99,12 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
         email,
         phone: phone || undefined,
         attending,
-        guestCount: attending === "YES" ? guestCount : 0,
+        adultCount: attending === "YES" ? adultCount : 0,
+        kidCount: attending === "YES" ? kidCount : 0,
         notes: notes || undefined,
+        items: attending === "YES"
+          ? Object.entries(itemSelections).map(([itemId, quantity]) => ({ itemId, quantity }))
+          : undefined,
       }),
     });
 
@@ -109,7 +146,7 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
       {/* Top strip */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-center py-2.5 text-sm font-medium tracking-wide">
-        TGROC — The Greater Richmond Organization of Cultures
+        TGROC — Tamils of Greater Rochester
       </div>
 
       <div className="max-w-xl mx-auto px-4 py-10">
@@ -132,6 +169,16 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
             )}
           </div>
 
+          {/* Poster */}
+          {event.posterUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={event.posterUrl}
+              alt={`${event.name} poster`}
+              className="w-full object-cover max-h-80"
+            />
+          )}
+
           {/* Event details */}
           <div className="px-8 py-6 border-b border-gray-100 bg-indigo-50/30">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -152,8 +199,87 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
                   </p>
                 </EventDetail>
               )}
+              {pricing && (
+                <EventDetail icon={<DollarSign className="w-5 h-5 text-indigo-500" />} label="Entry Fee" fullWidth>
+                  {pricing.isFree ? (
+                    <p className="font-semibold text-green-700 text-sm">Free admission</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {pricing.feeType === "FAMILY" && (
+                        <>
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Family</p>
+                          {pricing.memberFamilyFee !== null && (
+                            <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.memberFamilyFee).toFixed(2)}</span> <span className="text-gray-500">/ member family</span></p>
+                          )}
+                          {pricing.nonMemberFamilyFee !== null && (
+                            <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.nonMemberFamilyFee).toFixed(2)}</span> <span className="text-gray-500">/ non-member family</span></p>
+                          )}
+                          {(pricing.memberAdultFee !== null || pricing.nonMemberAdultFee !== null) && (
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1">Individual</p>
+                          )}
+                        </>
+                      )}
+                      {pricing.memberAdultFee !== null && (
+                        <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.memberAdultFee).toFixed(2)}</span> <span className="text-gray-500">{pricing.feeType === "FAMILY" ? "/ individual member" : "/ member adult (15+)"}</span></p>
+                      )}
+                      {pricing.nonMemberAdultFee !== null && (
+                        <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.nonMemberAdultFee).toFixed(2)}</span> <span className="text-gray-500">{pricing.feeType === "FAMILY" ? "/ individual non-member" : "/ non-member adult (15+)"}</span></p>
+                      )}
+                      {pricing.memberKidFee !== null && (
+                        <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.memberKidFee).toFixed(2)}</span> <span className="text-gray-500">/ member child (under 15)</span></p>
+                      )}
+                      {pricing.nonMemberKidFee !== null && (
+                        <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.nonMemberKidFee).toFixed(2)}</span> <span className="text-gray-500">/ non-member child (under 15)</span></p>
+                      )}
+                      {(pricing.studentMemberFee !== null || pricing.studentNonMemberFee !== null) && (
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1">Student</p>
+                      )}
+                      {pricing.studentMemberFee !== null && (
+                        <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.studentMemberFee).toFixed(2)}</span> <span className="text-gray-500">/ student member</span></p>
+                      )}
+                      {pricing.studentNonMemberFee !== null && (
+                        <p className="text-sm"><span className="font-semibold text-gray-900">${Number(pricing.studentNonMemberFee).toFixed(2)}</span> <span className="text-gray-500">/ student non-member</span></p>
+                      )}
+                      {pricing.notes && <p className="text-xs text-gray-400 mt-1">{pricing.notes}</p>}
+                    </div>
+                  )}
+                </EventDetail>
+              )}
             </div>
           </div>
+
+          {/* Performance registration callout */}
+          {event.performanceRegOpen && (
+            (() => {
+              const isDeadlinePassed = event.performanceRegDeadline
+                ? new Date() > new Date(event.performanceRegDeadline)
+                : false;
+              if (isDeadlinePassed) return null;
+              return (
+                <div className="mx-6 mb-2 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-2xl flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
+                      <Music className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-purple-900">Want to perform?</p>
+                      <p className="text-xs text-purple-600">
+                        {event.performanceRegDeadline
+                          ? `Register by ${new Date(event.performanceRegDeadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : "Performance registration is open"}
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={`/events/${id}/perform`}
+                    className="shrink-0 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-xl hover:bg-purple-700 transition-colors"
+                  >
+                    Register
+                  </a>
+                </div>
+              );
+            })()
+          )}
 
           {/* RSVP section */}
           <div className="px-8 py-6">
@@ -248,7 +374,7 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
                   </div>
 
                   {attending === "YES" && (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Phone (optional)</label>
                         <input
@@ -261,16 +387,97 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Number of guests (incl. you)
+                          Adults (15+) <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="number"
                           min={1}
-                          max={10}
-                          value={guestCount}
-                          onChange={(e) => setGuestCount(parseInt(e.target.value) || 1)}
+                          max={20}
+                          value={adultCount}
+                          onChange={(e) => setAdultCount(Math.max(1, parseInt(e.target.value) || 1))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Kids (under 15)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={kidCount}
+                          onChange={(e) => setKidCount(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Items to bring — shown when attending YES and event has items */}
+                  {attending === "YES" && event.items && event.items.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Items to bring
+                        <span className="ml-1.5 text-xs text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <div className="space-y-2">
+                        {event.items.map((item) => {
+                          const selected = itemSelections[item.id] !== undefined;
+                          const qty = itemSelections[item.id] ?? 1;
+                          return (
+                            <div
+                              key={item.id}
+                              className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                                selected ? "border-indigo-300 bg-indigo-50" : "border-gray-200 hover:border-gray-300"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                id={`item-${item.id}`}
+                                checked={selected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setItemSelections((prev) => ({ ...prev, [item.id]: 1 }));
+                                  } else {
+                                    setItemSelections((prev) => {
+                                      const next = { ...prev };
+                                      delete next[item.id];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-gray-300 accent-indigo-600"
+                              />
+                              <label htmlFor={`item-${item.id}`} className="flex-1 min-w-0 cursor-pointer">
+                                <span className="text-sm font-medium text-gray-900">{item.name}</span>
+                                {item.description && (
+                                  <span className="text-xs text-gray-400 ml-2">{item.description}</span>
+                                )}
+                                <span className="text-xs text-gray-300 ml-2">need {item.quantityNeeded}</span>
+                              </label>
+                              {selected && (
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setItemSelections((prev) => ({ ...prev, [item.id]: Math.max(1, qty - 1) }))}
+                                    className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-base font-bold leading-none"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="w-8 text-center text-sm font-semibold text-gray-900">{qty}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setItemSelections((prev) => ({ ...prev, [item.id]: qty + 1 }))}
+                                    className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-base font-bold leading-none"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
