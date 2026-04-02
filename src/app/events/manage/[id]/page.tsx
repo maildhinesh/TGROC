@@ -175,6 +175,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [isSendingReminder, setIsSendingReminder] = useState(false);
   const [reminderResult, setReminderResult] = useState<{ count: number; emailSent: boolean; emailError?: string } | null>(null);
 
+  // RSVP reminders
+  const [isSendingRsvpReminder, setIsSendingRsvpReminder] = useState(false);
+  const [rsvpReminderResult, setRsvpReminderResult] = useState<{ count: number; emailSent: boolean; emailError?: string } | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/events/${id}`).then((r) => r.json()),
@@ -277,6 +281,25 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       setPricing(json.pricing);
       setPricingSaved(true);
       setTimeout(() => setPricingSaved(false), 3000);
+    }
+  };
+
+  const sendRsvpReminder = async () => {
+    const noActionCount = rows.filter((r) => r.type === "MEMBER" && r.status === "NO_ACTION").length;
+    if (!confirm(`Send an RSVP reminder to ${noActionCount} member${noActionCount !== 1 ? "s" : ""} who haven't responded?`)) return;
+    setIsSendingRsvpReminder(true);
+    setRsvpReminderResult(null);
+    const res = await fetch(`/api/events/${id}/rsvp-reminder`, { method: "POST" });
+    const json = await res.json();
+    setIsSendingRsvpReminder(false);
+    if (!res.ok) {
+      alert(json.error ?? "Failed to send RSVP reminders.");
+    } else {
+      setRsvpReminderResult({
+        count: json.recipientCount,
+        emailSent: json.emailSent,
+        emailError: json.emailError ?? undefined,
+      });
     }
   };
 
@@ -1184,12 +1207,30 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               <h3 className="text-lg font-semibold text-gray-900">Member Responses</h3>
               <p className="text-xs text-gray-400 mt-0.5">{rows.filter(r => r.type === "MEMBER").length} members · {rows.filter(r => r.type === "GUEST").length} guests · click a column header to sort</p>
             </div>
-            {rows.length > 0 && (
-              <Button size="sm" variant="secondary" onClick={handleExportCsv}>
-                <Download className="w-4 h-4" /> Export CSV
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {event.status === "PUBLISHED" && noActionCount > 0 && (
+                <Button size="sm" variant="secondary" onClick={sendRsvpReminder} isLoading={isSendingRsvpReminder}>
+                  <Bell className="w-4 h-4" /> Remind ({noActionCount})
+                </Button>
+              )}
+              {rows.length > 0 && (
+                <Button size="sm" variant="secondary" onClick={handleExportCsv}>
+                  <Download className="w-4 h-4" /> Export CSV
+                </Button>
+              )}
+            </div>
           </div>
+          {rsvpReminderResult && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${
+              rsvpReminderResult.emailSent
+                ? "bg-green-50 border border-green-200 text-green-700"
+                : "bg-yellow-50 border border-yellow-200 text-yellow-700"
+            }`}>
+              {rsvpReminderResult.emailSent
+                ? `✓ Reminder sent to ${rsvpReminderResult.count} member${rsvpReminderResult.count !== 1 ? "s" : ""}.`
+                : `⚠ Reminder recorded but email could not be sent. ${rsvpReminderResult.emailError ?? ""}`}
+            </div>
+          )}
           {rows.length === 0 ? (
             <div className="text-center py-6">
               <Users className="w-10 h-10 text-gray-200 mx-auto mb-2" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -15,7 +15,10 @@ const errorMessages: Record<string, string> = {
   AccountPending: "Your account is pending activation. Please contact an administrator.",
   OAuthAccountNotLinked:
     "An account with this email already exists. Please sign in with your original method.",
+  OAuthSignin: "Could not start the sign-in process. Please check your OAuth configuration or try again.",
+  OAuthCallback: "An error occurred while completing sign-in with the provider. Please try again.",
   default: "Something went wrong. Please try again.",
+  NotImplemented: "This authentication method is not yet implemented. Please try another method.",
 };
 
 function LoginContent() {
@@ -29,6 +32,13 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(
     urlError ? (errorMessages[urlError] ?? errorMessages.default) : null
   );
+
+  // Re-evaluate the URL error param on every navigation (e.g. OAuth redirect back to this page)
+  useEffect(() => {
+    if (urlError) {
+      setError(errorMessages[urlError] ?? errorMessages.default);
+    }
+  }, [urlError]);
 
   const {
     register,
@@ -58,7 +68,11 @@ function LoginContent() {
   };
 
   const handleSocialLogin = (provider: "google" | "facebook") => {
-    signIn(provider, { callbackUrl });
+    if(provider == "facebook") {
+      window.location.href = "/auth/login?error=NotImplemented";
+    } else {
+      signIn(provider, { callbackUrl });
+    }
   };
 
   return (

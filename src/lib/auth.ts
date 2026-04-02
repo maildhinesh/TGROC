@@ -9,14 +9,18 @@ import { prisma } from "@/lib/db";
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-    FacebookProvider({
-      clientId: process.env.FACEBOOK_CLIENT_ID!,
-      clientSecret: process.env.FACEBOOK_CLIENT_SECRET!,
-    }),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [GoogleProvider({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        })]
+      : []),
+    ...(process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET
+      ? [FacebookProvider({
+          clientId: process.env.FACEBOOK_CLIENT_ID,
+          clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+        })]
+      : []),
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -69,9 +73,12 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider !== "credentials") {
+        if (!user.email) return "/auth/login?error=OAuthSignin";
+
         // For social logins, check if user account is active
         const dbUser = await prisma.user.findUnique({
-          where: { email: user.email! },
+          where: { email: user.email },
+          include: { accounts: true },
         });
 
         if (dbUser) {
@@ -80,6 +87,31 @@ export const authOptions: NextAuthOptions = {
           }
           if (dbUser.status === "PENDING") {
             return "/auth/login?error=AccountPending";
+          }
+
+          // If this user was created by an admin (no linked OAuth account for this provider),
+          // link the provider account now so NextAuth doesn't throw OAuthAccountNotLinked.
+          const alreadyLinked = dbUser.accounts.some(
+            (a) => a.provider === account.provider
+          );
+          if (!alreadyLinked) {
+            await prisma.account.create({
+              data: {
+                userId: dbUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token ?? null,
+                refresh_token: account.refresh_token ?? null,
+                expires_at: account.expires_at ?? null,
+                token_type: account.token_type ?? null,
+                scope: account.scope ?? null,
+                id_token: account.id_token ?? null,
+                session_state: (account.session_state as string) ?? null,
+              },
+            });
+            // Ensure the rest of the NextAuth flow uses the existing user's id
+            user.id = dbUser.id;
           }
         }
         // If user doesn't exist yet, they'll be created by PrismaAdapter with PENDING status

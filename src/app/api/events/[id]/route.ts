@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { sendEventAnnouncementEmails } from "@/lib/email";
 
 const MGMT_ROLES = ["ADMIN", "OFFICE_BEARER"];
 
@@ -57,6 +58,10 @@ export async function PATCH(
   const body = await req.json();
   const { name, description, eventDate, venue, status, performanceRegOpen, performanceRegDeadline } = body;
 
+  // Detect publish transition before updating
+  const existing = await prisma.event.findUnique({ where: { id }, select: { status: true } });
+  const isBeingPublished = status === "PUBLISHED" && existing?.status !== "PUBLISHED";
+
   const event = await prisma.event.update({
     where: { id },
     data: {
@@ -71,6 +76,36 @@ export async function PATCH(
       }),
     },
   });
+
+  // Send announcement emails to all active members when first published
+  if (isBeingPublished) {
+    try {
+      const members = await prisma.user.findMany({
+        where: { status: "ACTIVE" },
+        select: {
+          email: true,
+          notificationSettings: { select: { emailNotifications: true, eventReminders: true } },
+        },
+      });
+      const recipients = members
+        .filter((m) => {
+          const prefs = m.notificationSettings;
+          return !prefs || (prefs.emailNotifications && prefs.eventReminders);
+        })
+        .map((m) => m.email as string);
+
+      await sendEventAnnouncementEmails({
+        eventId: id,
+        eventName: event.name,
+        eventDate: event.eventDate,
+        venue: event.venue,
+        posterUrl: event.posterUrl,
+        recipients,
+      });
+    } catch (err) {
+      console.error("[event publish] Failed to send announcement emails:", err);
+    }
+  }
 
   return NextResponse.json({ event });
 }

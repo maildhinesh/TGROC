@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Download,
 } from "lucide-react";
 import { formatDate, getMembershipLabel, getStatusColor } from "@/lib/utils";
 import Link from "next/link";
@@ -63,6 +64,49 @@ function AdminUsersContent() {
   const [roleFilter, setRoleFilter] = useState(searchParams.get("role") ?? "");
   const [page, setPage] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportToCSV = async () => {
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "10000",
+        ...(search && { search }),
+        ...(statusFilter && { status: statusFilter }),
+        ...(roleFilter && { role: roleFilter }),
+      });
+      const res = await fetch(`/api/users?${params}`);
+      const data = await res.json();
+      const allUsers: User[] = data.users ?? [];
+
+      const headers = ["Name", "Email", "Role", "Membership Type", "Status", "Phone", "Joined"];
+      const rows = allUsers.map((u) => [
+        u.profile ? `${u.profile.firstName} ${u.profile.lastName}` : (u.name ?? ""),
+        u.email,
+        u.role,
+        u.membershipType ?? "",
+        u.status,
+        u.profile?.phone ?? "",
+        new Date(u.createdAt).toLocaleDateString(),
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const datePart = new Date().toISOString().split("T")[0];
+      link.download = `users-export-${datePart}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
@@ -151,6 +195,10 @@ function AdminUsersContent() {
           <option value="OFFICE_BEARER">Office Bearer</option>
           <option value="MEMBER">Member</option>
         </select>
+        <Button variant="secondary" onClick={exportToCSV} isLoading={isExporting}>
+          <Download className="w-4 h-4" />
+          Export CSV
+        </Button>
       </div>
 
       {/* Table */}

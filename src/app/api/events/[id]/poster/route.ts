@@ -4,9 +4,15 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { writeFile, mkdir, unlink, access } from "fs/promises";
 import path from "path";
+import { v2 as cloudinary } from "cloudinary";
 
 const MGMT_ROLES = ["ADMIN", "OFFICE_BEARER"];
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+
+/** Returns true when CLOUDINARY env var is set to "Yes" (case-insensitive). */
+function useCloudinary(): boolean {
+  return process.env.CLOUDINARY?.toLowerCase() === "yes";
+}
 
 function getExtFromMime(mime: string): string | null {
   if (mime === "image/jpeg") return "jpg";
@@ -24,6 +30,78 @@ function validateMagicBytes(buf: Buffer, mime: string): boolean {
   return false;
 }
 
+// ── Cloudinary helpers ────────────────────────────────────────────────────────
+
+function configureCloudinary() {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
+
+/** Upload a buffer to Cloudinary and return the secure URL. */
+async function uploadToCloudinary(buffer: Buffer, publicId: string): Promise<string> {
+  configureCloudinary();
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      { folder: "tgroc/events", public_id: publicId, overwrite: true, resource_type: "image" },
+      (err, result) => {
+        if (err || !result) return reject(err ?? new Error("Cloudinary upload failed"));
+        resolve(result.secure_url);
+      }
+    ).end(buffer);
+  });
+}
+
+/** Delete an asset from Cloudinary using its public_id. */
+async function deleteFromCloudinary(publicId: string): Promise<void> {
+  configureCloudinary();
+  await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+}
+
+/**
+ * Extract the Cloudinary public_id from a stored URL.
+ * URL format: https://res.cloudinary.com/<cloud>/image/upload/v<ver>/tgroc/events/<id>
+ */
+function publicIdFromUrl(url: string): string | null {
+  const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
+  return match ? match[1] : null;
+}
+
+// ── Local filesystem helpers ──────────────────────────────────────────────────
+
+async function uploadToLocal(buffer: Buffer, eventId: string, ext: string): Promise<string> {
+  const uploadsDir = path.join(process.cwd(), "public", "uploads", "events");
+  await mkdir(uploadsDir, { recursive: true });
+
+  // Remove old poster with a different extension
+  for (const oldExt of ["jpg", "png"]) {
+    if (oldExt === ext) continue;
+    const oldPath = path.join(uploadsDir, `${eventId}.${oldExt}`);
+    try {
+      await access(oldPath);
+      await unlink(oldPath);
+    } catch {
+      // file doesn't exist, no action needed
+    }
+  }
+
+  await writeFile(path.join(uploadsDir, `${eventId}.${ext}`), buffer);
+  return `/uploads/events/${eventId}.${ext}`;
+}
+
+async function deleteFromLocal(posterUrl: string): Promise<void> {
+  const filePath = path.join(process.cwd(), "public", posterUrl);
+  try {
+    await unlink(filePath);
+  } catch {
+    // file already removed from disk, continue
+  }
+}
+
+// ── Route handlers ────────────────────────────────────────────────────────────
+
 // POST /api/events/[id]/poster — upload or replace event poster
 export async function POST(
   req: NextRequest,
@@ -36,7 +114,6 @@ export async function POST(
 
   const { id } = await params;
 
-  // Verify event exists
   const event = await prisma.event.findUnique({ where: { id }, select: { id: true, posterUrl: true } });
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
@@ -63,27 +140,15 @@ export async function POST(
     return NextResponse.json({ error: "File content does not match its declared type." }, { status: 400 });
   }
 
-  const uploadsDir = path.join(process.cwd(), "public", "uploads", "events");
-  await mkdir(uploadsDir, { recursive: true });
+  let posterUrl: string;
 
-  // Remove old poster file if it exists with a different extension
-  for (const oldExt of ["jpg", "png"]) {
-    if (oldExt === ext) continue;
-    const oldPath = path.join(uploadsDir, `${id}.${oldExt}`);
-    try {
-      await access(oldPath);
-      await unlink(oldPath);
-    } catch {
-      // file doesn't exist, no action needed
-    }
+  if (useCloudinary()) {
+    posterUrl = await uploadToCloudinary(buffer, id);
+  } else {
+    posterUrl = await uploadToLocal(buffer, id, ext);
   }
 
-  const filePath = path.join(uploadsDir, `${id}.${ext}`);
-  await writeFile(filePath, buffer);
-
-  const posterUrl = `/uploads/events/${id}.${ext}`;
   await prisma.event.update({ where: { id }, data: { posterUrl } });
-
   return NextResponse.json({ posterUrl });
 }
 
@@ -103,11 +168,11 @@ export async function DELETE(
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
   if (event.posterUrl) {
-    const filePath = path.join(process.cwd(), "public", event.posterUrl);
-    try {
-      await unlink(filePath);
-    } catch {
-      // file already removed from disk, continue
+    if (useCloudinary()) {
+      const publicId = publicIdFromUrl(event.posterUrl);
+      if (publicId) await deleteFromCloudinary(publicId);
+    } else {
+      await deleteFromLocal(event.posterUrl);
     }
     await prisma.event.update({ where: { id }, data: { posterUrl: null } });
   }

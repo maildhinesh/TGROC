@@ -6,9 +6,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { PageHeader, Card, Button, Input, Spinner } from "@/components/ui";
-import { profileSchema, ProfileInput, familyMemberSchema, FamilyMemberInput } from "@/lib/validations";
+import { profileSchema, ProfileInput, familyMemberSchema, FamilyMemberInput, changePasswordSchema, ChangePasswordInput } from "@/lib/validations";
 import { formatDate, getMembershipLabel } from "@/lib/utils";
-import { Save, Plus, Trash2, Users, X } from "lucide-react";
+import { Save, Plus, Trash2, Users, X, Lock } from "lucide-react";
 
 interface FamilyMember {
   id: string;
@@ -39,6 +39,10 @@ export default function MemberProfilePage() {
   const [isAddingFamily, setIsAddingFamily] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
 
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
+
   const isFamilyMembership =
     membershipType === "FAMILY" || membershipType === "STUDENT_FAMILY";
 
@@ -59,6 +63,15 @@ export default function MemberProfilePage() {
   } = useForm<FamilyMemberInput>({
     resolver: zodResolver(familyMemberSchema),
     defaultValues: { relationship: "CHILD" },
+  });
+
+  const {
+    register: registerPassword,
+    handleSubmit: handleSubmitPassword,
+    reset: resetPassword,
+    formState: { errors: passwordErrors },
+  } = useForm<ChangePasswordInput>({
+    resolver: zodResolver(changePasswordSchema),
   });
 
   useEffect(() => {
@@ -137,6 +150,31 @@ export default function MemberProfilePage() {
       setFamilyMembers((prev) => [...prev, json.member]);
       setShowAddFamily(false);
       resetFamily();
+    }
+  };
+
+  const onChangePassword = async (data: ChangePasswordInput) => {
+    if (!userId) return;
+    setIsChangingPassword(true);
+    setChangePasswordError(null);
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: data.currentPassword, password: data.newPassword }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setChangePasswordError(json.error ?? "Failed to change password. Please try again.");
+      } else {
+        setChangePasswordSuccess(true);
+        resetPassword();
+        setTimeout(() => setChangePasswordSuccess(false), 3000);
+      }
+    } catch {
+      setChangePasswordError("Network error. Please check your connection and try again.");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -237,6 +275,52 @@ export default function MemberProfilePage() {
                 <Button type="submit" isLoading={isSaving}>
                   <Save className="w-4 h-4" />
                   Save Profile
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </form>
+
+        {/* Change Password */}
+        <form onSubmit={handleSubmitPassword(onChangePassword)}>
+          <Card title="Change Password" description="Update your account password.">
+            <div className="space-y-4">
+              {changePasswordSuccess && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                  ✓ Password updated successfully.
+                </div>
+              )}
+              {changePasswordError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  ✗ {changePasswordError}
+                </div>
+              )}
+              <Input
+                label="Current Password"
+                type="password"
+                required
+                {...registerPassword("currentPassword")}
+                error={passwordErrors.currentPassword?.message}
+              />
+              <Input
+                label="New Password"
+                type="password"
+                required
+                {...registerPassword("newPassword")}
+                error={passwordErrors.newPassword?.message}
+                hint="Minimum 8 characters"
+              />
+              <Input
+                label="Confirm New Password"
+                type="password"
+                required
+                {...registerPassword("confirmPassword")}
+                error={passwordErrors.confirmPassword?.message}
+              />
+              <div className="pt-2 flex justify-end">
+                <Button type="submit" isLoading={isChangingPassword}>
+                  <Lock className="w-4 h-4" />
+                  Update Password
                 </Button>
               </div>
             </div>

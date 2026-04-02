@@ -59,7 +59,25 @@ export async function PATCH(
     delete body.membershipType;
   }
 
-  const { profile, contactInfo, notificationSettings, password, ...userData } = body;
+  const { profile, contactInfo, notificationSettings, password, currentPassword, ...userData } = body;
+
+  // Self-service password change: verify current password before proceeding
+  if (password && session.user.role !== "ADMIN") {
+    if (session.user.id !== id || !currentPassword) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const dbUser = await prisma.user.findUnique({ where: { id }, select: { password: true } });
+    if (!dbUser?.password) {
+      return NextResponse.json(
+        { error: "Password change is not available for social login accounts." },
+        { status: 400 }
+      );
+    }
+    const isValid = await bcrypt.compare(currentPassword, dbUser.password);
+    if (!isValid) {
+      return NextResponse.json({ error: "Current password is incorrect." }, { status: 400 });
+    }
+  }
 
   const updates: any[] = [];
 
@@ -120,7 +138,7 @@ export async function PATCH(
     );
   }
 
-  if (password && session.user.role === "ADMIN") {
+  if (password && (session.user.role === "ADMIN" || (session.user.id === id && currentPassword))) {
     const hashed = await bcrypt.hash(password, 12);
     updates.push(prisma.user.update({ where: { id }, data: { password: hashed } }));
   }

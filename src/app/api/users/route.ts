@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { createUserSchema } from "@/lib/validations";
+import { sendWelcomeEmail } from "@/lib/email";
 
 // GET /api/users - List all users (Admin & Office Bearer only)
 export async function GET(req: NextRequest) {
@@ -104,5 +105,13 @@ export async function POST(req: NextRequest) {
     include: { profile: true },
   });
 
+  // Send welcome email with login credentials (non-fatal)
+  try {
+    await sendWelcomeEmail({ to: email, firstName, password });
+  } catch (err) {
+    console.error("[create user] Failed to send welcome email:", err);
+  }
+
   return NextResponse.json({ user }, { status: 201 });
 }
+
