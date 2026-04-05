@@ -29,12 +29,14 @@ The TGROC Member Portal is a full-stack web application for managing community m
 | Domain | Features |
 |---|---|
 | **Membership** | Self-registration, admin activation, profile management, family member tracking, membership tiers, expiry alerts |
-| **Authentication** | Email/password + Google + Facebook OAuth, JWT sessions, role-based access control, middleware-level route protection |
+| **Authentication** | Email/password + Google + Facebook OAuth, JWT sessions, role-based access control, middleware-level route protection, OAuth account auto-linking for admin-created users |
 | **Events** | Event creation with poster upload, RSVP collection (members + guests), item-bring assignments, performance registrations |
 | **Event Pricing** | Free or paid entry, family-tier or individual-tier fees, member discount pricing, payment instructions |
 | **Fee Reminders** | Email reminders to confirmed RSVPs including full fee breakdown; reminder history log |
 | **Membership Fees** | Per-type fee configuration with effective-date history |
 | **Notifications** | Per-user preference flags for email, SMS, newsletters, event reminders, and membership alerts |
+| **Email Notifications** | Welcome email on user creation (with credentials), event announcement email to all active members on publish, RSVP reminder emails to non-respondents |
+| **Event Day Operations** | Officer/admin check-in flow for RSVPs and walk-ins; tracks adult/kid counts and manual payment collected; expense tracking by category (hall rent, food, supplies, cleaning, miscellaneous) |
 
 ---
 
@@ -127,7 +129,10 @@ c:\Source\TGROC\
 │       ├── 20260328020046_add_event_items/
 │       ├── 20260328030000_split_guest_count/
 │       ├── 20260330010005_performance_registrations/
-│       └── 20260331124517_add_event_pricing_and_fee_reminders/
+│       ├── 20260331124517_add_event_pricing_and_fee_reminders/
+│       ├── 20260331145130_add_student_fee_tiers/
+│       ├── 20260331150713_add_membership_expiry_reminders/
+│       └── 20260405000000_add_checkins_and_expenses/
 │
 ├── public/
 │   └── uploads/
@@ -178,8 +183,10 @@ c:\Source\TGROC\
     │   │       ├── page.tsx           # Event list
     │   │       ├── new/page.tsx       # Create event form
     │   │       └── [id]/
-    │   │           ├── page.tsx       # Event dashboard (RSVPs, items, perf, pricing, reminders)
-    │   │           └── edit/page.tsx  # Edit event + poster
+    │   │           ├── page.tsx       # Event dashboard (RSVPs, items, perf, pricing, reminders, expenses)
+    │   │           ├── edit/page.tsx  # Edit event + poster
+    │   │           └── checkin/
+    │   │               └── page.tsx   # Event day check-in (RSVPs + walk-ins, payment tracking)
     │   │
     │   ├── fees/page.tsx              # Membership fee configuration
     │   │
@@ -199,13 +206,20 @@ c:\Source\TGROC\
     │           └── [id]/
     │               ├── route.ts       # GET, PATCH, DELETE
     │               ├── rsvp/route.ts
+    │               ├── rsvp-reminder/route.ts  # POST: send reminder to non-respondents
     │               ├── items/
     │               │   ├── route.ts
     │               │   └── [itemId]/route.ts
     │               ├── poster/route.ts
     │               ├── performances/route.ts
     │               ├── pricing/route.ts
-    │               └── fee-reminder/route.ts
+    │               ├── fee-reminder/route.ts
+    │               ├── checkin/
+    │               │   ├── route.ts           # GET list, POST add check-in
+    │               │   └── [checkinId]/route.ts  # PATCH, DELETE
+    │               └── expenses/
+    │                   ├── route.ts           # GET list, POST add expense
+    │                   └── [expenseId]/route.ts  # PATCH, DELETE
     │
     ├── components/
     │   ├── providers.tsx        # SessionProvider wrapper
@@ -248,6 +262,7 @@ c:\Source\TGROC\
 | `PerformanceType` | `SINGING`, `DANCE`, `SKIT`, `POEM_RECITAL`, `QUIZ`, `STANDUP` | `PerformanceRegistration.performanceType` |
 | `MicType` | `STANDING`, `HANDHELD` | `PerformanceRegistration.micType` |
 | `EventFeeType` | `FAMILY`, `INDIVIDUAL` | `EventPricing.feeType` |
+| `ExpenseCategory` | `HALL_RENT`, `FOOD`, `SUPPLIES`, `CLEANING`, `MISCELLANEOUS` | `EventExpense.category` |
 
 ### Domain Models
 
@@ -358,6 +373,33 @@ c:\Source\TGROC\
 | `nonMemberKidFee` | `Decimal?` | Applies when `feeType = INDIVIDUAL` (under 15) |
 | `notes` | `String?` | Payment instructions shown publicly |
 
+**`EventCheckIn`** — Records a single check-in group at an event. Unique on `[eventId, email]` so a walk-in can update their entry. Supports both pre-RSVPed guests (looked up by email) and door walk-ins.
+
+| Field | Type | Notes |
+|---|---|---|
+| `eventId` | `String` | FK → Event |
+| `name` | `String` | Guest name |
+| `email` | `String` | Identifies the check-in (unique per event) |
+| `phone` | `String?` | Optional |
+| `adultCount` | `Int` | Adults (15+) in the group |
+| `kidCount` | `Int` | Children (under 15) in the group |
+| `amountPaid` | `Decimal?` | Amount collected at door |
+| `paymentNote` | `String?` | Cash / card / note |
+| `checkedInById` | `String` | FK → User (the officer who checked them in) |
+| `checkedInAt` | `DateTime` | Auto timestamp |
+
+**`EventExpense`** — A single expense line item for an event.
+
+| Field | Type | Notes |
+|---|---|---|
+| `eventId` | `String` | FK → Event |
+| `category` | `ExpenseCategory` | Expense type |
+| `description` | `String` | Free-text description |
+| `amount` | `Decimal(10,2)` | Dollar amount |
+| `createdById` | `String` | FK → User (who logged it) |
+| `createdAt` | `DateTime` | Auto |
+| `updatedAt` | `DateTime` | Auto |
+
 **`EventFeeReminder`** — Audit log of every fee reminder batch email sent for an event.
 
 | Field | Type | Notes |
@@ -454,6 +496,19 @@ Standard NextAuth Prisma Adapter models: `Account`, `Session`, `VerificationToke
 │  │  sentById → User                                                       │ │
 │  │  recipientCount                                                        │ │
 │  │  message                                                               │ │
+│  │                                                                        │ │
+│  │ 0..N                    0..N                                           │ │
+│  │       ▼                       ▼                                       │ │
+│  │ EventCheckIn            EventExpense                                   │ │
+│  │  ──────────────────     ────────────────────                           │ │
+│  │  name                   category (enum)                                │ │
+│  │  email (unique/event)   description                                    │ │
+│  │  phone                  amount                                         │ │
+│  │  adultCount             createdById → User                             │ │
+│  │  kidCount                                                              │ │
+│  │  amountPaid                                                            │ │
+│  │  paymentNote                                                           │ │
+│  │  checkedInById → User                                                  │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -474,6 +529,10 @@ Standard NextAuth Prisma Adapter models: `Account`, `Session`, `VerificationToke
 | Event → EventPricing | 1-to-1 | Delete cascade |
 | Event → PerformanceRegistration | 1-to-many | Delete cascade |
 | Event → EventFeeReminder | 1-to-many | Delete cascade |
+| Event → EventCheckIn | 1-to-many | Delete cascade |
+| Event → EventExpense | 1-to-many | Delete cascade |
+| User → EventCheckIn | 1-to-many (checked in by) | — |
+| User → EventExpense | 1-to-many (created by) | — |
 | EventRsvp → EventRsvpItem | 1-to-many | Delete cascade |
 | EventItem → EventRsvpItem | 1-to-many | Delete cascade |
 
@@ -509,9 +568,9 @@ All API routes live under `/api/`. JSON is the default content type. Authenticat
 | Method | Path | Access | Description |
 |---|---|---|---|
 | GET | `/api/users` | Management | Lists users. Query params: `page`, `limit` (default 20), `search` (name/email), `status`, `role`, `membership`. Returns `{ users, pagination }`. |
-| POST | `/api/users` | Admin only | Creates user with profile. Password hashed with bcrypt. Admin-created accounts start `ACTIVE`. |
+| POST | `/api/users` | Admin only | Creates user with profile. Password hashed with bcrypt. Admin-created accounts start `ACTIVE`. Sends a welcome email to the user with their login credentials. |
 | GET | `/api/users/[id]` | Authenticated | Full user object with profile, contact, family, notifications (minus password). Members can only fetch own. |
-| PATCH | `/api/users/[id]` | Authenticated | Updates user. Members: only `profile`, `contactInfo`, `notificationSettings`. Admins: also `role`, `status`, `membershipType`, `membershipExpiry`, `password`. |
+| PATCH | `/api/users/[id]` | Authenticated | Updates user. Members: only `profile`, `contactInfo`, `notificationSettings`, or self-service password change (requires current password verification). Admins: also `role`, `status`, `membershipType`, `membershipExpiry`, `password`. |
 | DELETE | `/api/users/[id]` | Admin only | Deletes user and all related data. Cannot delete own account. |
 | GET | `/api/users/[id]/family` | Authenticated | Lists family members for a user. |
 | POST | `/api/users/[id]/family` | Authenticated | Adds family member. Requires FAMILY membership type. Enforces max 1 spouse. |
@@ -527,10 +586,11 @@ All API routes live under `/api/`. JSON is the default content type. Authenticat
 | GET | `/api/events` | Various | Without params: public list (id, name, date, venue). `?manage=1`: full management list for ADMIN/OFFICER. `?member=1`: published events with caller's RSVP status. |
 | POST | `/api/events` | Management | Creates event. Required: `name`, `eventDate`, `venue`. Optional: `description`, `status`. |
 | GET | `/api/events/[id]` | Various | Full event with items, createdBy profile, RSVP count. Non-managers see PUBLISHED only. |
-| PATCH | `/api/events/[id]` | Management | Updates any event field including `performanceRegOpen` and `performanceRegDeadline`. |
+| PATCH | `/api/events/[id]` | Management | Updates any event field including `performanceRegOpen` and `performanceRegDeadline`. When `status` transitions to `PUBLISHED`, automatically sends an announcement email to all active members with `eventReminders` enabled. |
 | DELETE | `/api/events/[id]` | Management | Deletes event and all cascaded records. |
 | GET | `/api/events/[id]/rsvp` | Management | `?full=1`: merged view of all members + guest RSVPs with status. Without param: raw RSVP list. |
 | POST | `/api/events/[id]/rsvp` | Public | Submits or updates RSVP. Upserts on `[eventId, email]`. Includes item selections. |
+| POST | `/api/events/[id]/rsvp-reminder` | Management | Sends RSVP invitation email to all active members who have not yet responded. Filters by `emailNotifications` and `eventReminders` preferences. |
 | GET | `/api/events/[id]/items` | Various | Lists items with `quantityCommitted`. Published-check for non-managers. |
 | POST | `/api/events/[id]/items` | Management | Creates item. Fields: `name`, `description`, `quantityNeeded`, `sortOrder`. |
 | PATCH | `/api/events/[id]/items/[itemId]` | Management | Updates item. |
@@ -543,6 +603,14 @@ All API routes live under `/api/`. JSON is the default content type. Authenticat
 | PUT | `/api/events/[id]/pricing` | Management | Creates or overwrites event pricing. Nullifies irrelevant fee fields based on `isFree` and `feeType`. |
 | GET | `/api/events/[id]/fee-reminder` | Management | Lists past fee reminders for the event (newest first), including sender name. |
 | POST | `/api/events/[id]/fee-reminder` | Management | Sends fee reminder email to all YES RSVPs. Requires paid event with pricing configured. Logs reminder to DB regardless of email delivery success. |
+| GET | `/api/events/[id]/checkin` | Management | Lists all check-ins for the event with stats (total groups, adults, kids, amount collected). |
+| POST | `/api/events/[id]/checkin` | Management | Records a check-in. Upserts on `[eventId, email]`. Fields: `name`, `email`, `phone?`, `adultCount`, `kidCount`, `amountPaid?`, `paymentNote?`. |
+| PATCH | `/api/events/[id]/checkin/[checkinId]` | Management | Updates check-in counts or payment details. |
+| DELETE | `/api/events/[id]/checkin/[checkinId]` | Management | Removes a check-in record. |
+| GET | `/api/events/[id]/expenses` | Management | Lists all expenses for the event with per-category totals. |
+| POST | `/api/events/[id]/expenses` | Management | Adds an expense. Fields: `category` (ExpenseCategory enum), `description`, `amount`. |
+| PATCH | `/api/events/[id]/expenses/[expenseId]` | Management | Updates an expense record. |
+| DELETE | `/api/events/[id]/expenses/[expenseId]` | Management | Deletes an expense record. |
 
 ---
 
@@ -647,11 +715,15 @@ The JWT strategy means no server-side session lookup on every request. The token
 | Create/edit/delete events | ✓ | ✓ | — |
 | Set event pricing | ✓ | ✓ | — |
 | Send fee reminders | ✓ | ✓ | — |
+| Send RSVP reminder emails | ✓ | ✓ | — |
 | Manage performance registrations | ✓ | ✓ | — |
 | Add/remove items to bring | ✓ | ✓ | — |
+| Check in event guests | ✓ | ✓ | — |
+| Track event expenses | ✓ | ✓ | — |
 | RSVP to events | ✓ | ✓ | ✓ (public too) |
 | Configure membership fees | ✓ | ✓ | — |
 | Manage own family members | ✓ | ✓ | ✓ |
+| Change own password | ✓ | ✓ | ✓ |
 
 ---
 
@@ -691,7 +763,8 @@ The JWT strategy means no server-side session lookup on every request. The token
    └── performanceRegOpen = true, optional deadline
 
 6. Publish event (PATCH /api/events/[id] { status: "PUBLISHED" })
-   └── Event evite now publicly accessible at /events/[id]
+   ├── Event evite now publicly accessible at /events/[id]
+   └── Announcement email sent to all active members with eventReminders enabled
 
 7. Share evite URL with members and public
 
@@ -707,18 +780,31 @@ The JWT strategy means no server-side session lookup on every request. The token
     └── GET /api/events/[id]/rsvp?full=1
         → Merged table: all members + guest RSVPs
 
-11. Send fee reminders (if paid event):
+11. Send RSVP reminder to non-respondents (optional):
+    └── POST /api/events/[id]/rsvp-reminder
+        ├── Finds active members with no existing RSVP
+        └── Sends invitation email to non-respondents
+
+12. Send fee reminders (if paid event):
     └── POST /api/events/[id]/fee-reminder
         ├── Fetches all YES RSVPs
         ├── Builds HTML email with fee breakdown
         ├── Sends via SMTP (BCC all recipients)
         └── Logs reminder to EventFeeReminder table
 
-12. Export data:
+13. Event day operations:
+    ├── Navigate to /events/manage/[id]/checkin
+    ├── Pre-filled RSVP list for click-to-check-in
+    ├── Walk-in form for door guests
+    ├── POST /api/events/[id]/checkin (capture adults, kids, payment)
+    └── Track expenses via manage page expenses card
+        └── POST /api/events/[id]/expenses
+
+14. Export data:
     ├── RSVP list as CSV
     └── Performance registrations as CSV
 
-13. Event day → optionally Cancel event:
+15. Event day → optionally Cancel event:
     └── PATCH /api/events/[id] { status: "CANCELLED" }
 ```
 
@@ -776,6 +862,57 @@ The JWT strategy means no server-side session lookup on every request. The token
 7. Response: { emailSent, recipientCount, emailError? }
 8. UI shows success/warning banner
 9. Reminder history updates below the send button
+```
+
+### Event Day Check-In Flow
+
+```
+1. Admin/Officer visits /events/manage/[id]
+   └── Clicks "Check In" button (visible for PUBLISHED events)
+
+2. Navigates to /events/manage/[id]/checkin
+   ├── Summary stats: groups checked in, total attendees, RSVPs not checked in, $ collected
+   ├── Left panel: RSVP list (searchable); click row to pre-fill check-in form
+   └── Right panel: check-in form (pre-filled or blank for walk-in)
+
+3. Check-in form fields:
+   ├── Name, Email, Phone (optional)
+   ├── Adults (15+) and Children counts
+   └── Amount Paid + Payment Note (optional)
+
+4. POST /api/events/[id]/checkin
+   ├── Upserts on [eventId, email] (allows correction)
+   ├── Links checkedInById to current user
+   └── Returns updated check-in list
+
+5. Inline edit: click pencil icon on any check-in row to adjust counts/payment
+   └── PATCH /api/events/[id]/checkin/[checkinId]
+
+6. Undo check-in: click delete icon
+   └── DELETE /api/events/[id]/checkin/[checkinId]
+```
+
+### Event Expense Tracking Flow
+
+```
+1. Admin/Officer visits /events/manage/[id]
+   └── Scrolls to "Event Expenses" card
+
+2. Clicks "Add Expense"
+   ├── Select category: Hall Rent / Food / Supplies / Cleaning / Miscellaneous
+   ├── Enter description and amount
+   └── POST /api/events/[id]/expenses
+
+3. Expense table shows:
+   ├── All entries with category, description, amount
+   ├── Edit and delete controls per row
+   └── Footer: total + per-category subtotals
+
+4. Edit expense: click edit icon
+   └── PATCH /api/events/[id]/expenses/[expenseId]
+
+5. Delete expense: click delete icon
+   └── DELETE /api/events/[id]/expenses/[expenseId]
 ```
 
 ### Membership Fee Configuration Flow
@@ -929,7 +1066,7 @@ Wraps all authenticated pages. Provides:
 | Script | Command | Purpose |
 |---|---|---|
 | `npm run dev` | `next dev --webpack` | Start dev server (forces webpack, not Turbopack) |
-| `npm run build` | `next build --webpack` | Production build |
+| `npm run build` | `prisma generate && next build --webpack` | Production build (generates Prisma client first) |
 | `npm run start` | `next start` | Start production server |
 | `npm run lint` | `eslint` | Lint check |
 | `npm run db:generate` | `prisma generate` | Regenerate Prisma client after schema changes |
@@ -962,4 +1099,4 @@ npm run dev
 
 ---
 
-*Documentation generated: March 31, 2026*
+*Documentation updated: April 5, 2026*

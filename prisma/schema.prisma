@@ -72,6 +72,14 @@ enum MembershipReminderType {
   EXPIRED
 }
 
+enum ExpenseCategory {
+  HALL_RENT
+  FOOD
+  SUPPLIES
+  CLEANING
+  MISCELLANEOUS
+}
+
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
@@ -98,6 +106,8 @@ model User {
   eventPricings            EventPricing[]
   feeReminders             EventFeeReminder[]
   membershipReminders      MembershipExpiryReminder[]
+  checkIns                 EventCheckIn[]
+  expenses                 EventExpense[]
 
   @@map("users")
 }
@@ -137,6 +147,8 @@ model Event {
   performances PerformanceRegistration[]
   pricing   EventPricing?
   feeReminders EventFeeReminder[]
+  checkIns     EventCheckIn[]
+  expenses     EventExpense[]
 
   @@map("events")
 }
@@ -251,6 +263,42 @@ model EventFeeReminder {
   sentBy User  @relation(fields: [sentById], references: [id])
 
   @@map("event_fee_reminders")
+}
+
+model EventCheckIn {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  email       String
+  phone       String?
+  adultCount  Int      @default(1)
+  kidCount    Int      @default(0)
+  amountPaid  Decimal? @db.Decimal(10, 2)
+  paymentNote String?
+  checkedInById String
+  checkedInAt   DateTime @default(now())
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  checkedInBy User  @relation(fields: [checkedInById], references: [id])
+
+  @@unique([eventId, email])
+  @@map("event_checkins")
+}
+
+model EventExpense {
+  id          String          @id @default(cuid())
+  eventId     String
+  category    ExpenseCategory
+  description String
+  amount      Decimal         @db.Decimal(10, 2)
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy User  @relation(fields: [createdById], references: [id])
+
+  @@map("event_expenses")
 }
 
 model MembershipExpiryReminder {

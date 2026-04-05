@@ -9,7 +9,7 @@ import {
   ArrowLeft, Calendar, MapPin, FileText, Users, ExternalLink,
   Edit, Trash2, Globe, XCircle, Package, Plus, Check, X,
   ChevronUp, ChevronDown, ChevronsUpDown, Download, Music, Mic, ToggleLeft, ToggleRight,
-  DollarSign, Bell,
+  DollarSign, Bell, Receipt, UserCheck,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
@@ -179,6 +179,27 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [isSendingRsvpReminder, setIsSendingRsvpReminder] = useState(false);
   const [rsvpReminderResult, setRsvpReminderResult] = useState<{ count: number; emailSent: boolean; emailError?: string } | null>(null);
 
+  // Expenses
+  interface Expense {
+    id: string;
+    category: string;
+    description: string;
+    amount: string;
+    createdAt: string;
+    createdBy: { profile: { firstName: string; lastName: string } | null };
+  }
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [expCategory, setExpCategory] = useState("MISCELLANEOUS");
+  const [expDescription, setExpDescription] = useState("");
+  const [expAmount, setExpAmount] = useState("");
+  const [expError, setExpError] = useState<string | null>(null);
+  const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editExpCategory, setEditExpCategory] = useState("MISCELLANEOUS");
+  const [editExpDescription, setEditExpDescription] = useState("");
+  const [editExpAmount, setEditExpAmount] = useState("");
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/events/${id}`).then((r) => r.json()),
@@ -187,8 +208,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       fetch(`/api/events/${id}/performances`).then((r) => r.json()),
       fetch(`/api/events/${id}/pricing`).then((r) => r.json()),
       fetch(`/api/events/${id}/fee-reminder`).then((r) => r.json()),
+      fetch(`/api/events/${id}/expenses`).then((r) => r.json()),
     ])
-      .then(([evData, rsvpData, itemsData, perfData, pricingData, reminderData]) => {
+      .then(([evData, rsvpData, itemsData, perfData, pricingData, reminderData, expensesData]) => {
         const ev = evData.event ?? null;
         setEvent(ev);
         setRows(rsvpData.rows ?? []);
@@ -219,6 +241,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           setPricingNotes(p.notes ?? "");
         }
         setFeeReminders(reminderData.reminders ?? []);
+        setExpenses(expensesData.expenses ?? []);
         setIsLoading(false);
       })
       .catch(() => setIsLoading(false));
@@ -282,6 +305,48 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       setPricingSaved(true);
       setTimeout(() => setPricingSaved(false), 3000);
     }
+  };
+
+  const addExpense = async () => {
+    if (!expDescription.trim() || !expAmount) { setExpError("Description and amount are required."); return; }
+    const amount = parseFloat(expAmount);
+    if (isNaN(amount) || amount <= 0) { setExpError("Enter a valid amount."); return; }
+    setIsSavingExpense(true);
+    setExpError(null);
+    const res = await fetch(`/api/events/${id}/expenses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: expCategory, description: expDescription.trim(), amount }),
+    });
+    const json = await res.json();
+    setIsSavingExpense(false);
+    if (!res.ok) { setExpError(json.error ?? "Failed to add expense."); }
+    else {
+      setExpenses((prev) => [...prev, json.expense]);
+      setIsAddingExpense(false);
+      setExpDescription(""); setExpAmount(""); setExpCategory("MISCELLANEOUS");
+    }
+  };
+
+  const saveEditExpense = async (expId: string) => {
+    const amount = parseFloat(editExpAmount);
+    if (!editExpDescription.trim() || isNaN(amount) || amount <= 0) return;
+    const res = await fetch(`/api/events/${id}/expenses/${expId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: editExpCategory, description: editExpDescription.trim(), amount }),
+    });
+    const json = await res.json();
+    if (res.ok) {
+      setExpenses((prev) => prev.map((e) => (e.id === expId ? json.expense : e)));
+      setEditingExpenseId(null);
+    }
+  };
+
+  const deleteExpense = async (expId: string) => {
+    if (!confirm("Delete this expense?")) return;
+    await fetch(`/api/events/${id}/expenses/${expId}`, { method: "DELETE" });
+    setExpenses((prev) => prev.filter((e) => e.id !== expId));
   };
 
   const sendRsvpReminder = async () => {
@@ -545,6 +610,13 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 <Button size="sm" onClick={() => updateStatus("PUBLISHED")} isLoading={isUpdating}>
                   <Globe className="w-4 h-4" /> Re-publish
                 </Button>
+              )}
+              {event.status === "PUBLISHED" && (
+                <Link href={`/events/manage/${id}/checkin`}>
+                  <Button size="sm" variant="secondary">
+                    <UserCheck className="w-4 h-4" /> Check In
+                  </Button>
+                </Link>
               )}
               <Link href={`/events/manage/${id}/edit`}>
                 <Button size="sm" variant="secondary"><Edit className="w-4 h-4" /> Edit</Button>
@@ -1287,6 +1359,157 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           )}
         </Card>
+
+        {/* Expenses */}
+        {(() => {
+          const EXPENSE_LABELS: Record<string, string> = {
+            HALL_RENT: "Hall Rent",
+            FOOD: "Food",
+            SUPPLIES: "Supplies",
+            CLEANING: "Cleaning",
+            MISCELLANEOUS: "Miscellaneous",
+          };
+          const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+          const byCategory = expenses.reduce((acc, e) => {
+            acc[e.category] = (acc[e.category] ?? 0) + parseFloat(e.amount);
+            return acc;
+          }, {} as Record<string, number>);
+          return (
+            <Card>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-orange-500" />
+                  <h3 className="text-lg font-semibold text-gray-900">Event Expenses</h3>
+                  {expenses.length > 0 && (
+                    <span className="bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                      ${totalExpenses.toFixed(2)} total
+                    </span>
+                  )}
+                </div>
+                {!isAddingExpense && (
+                  <Button size="sm" variant="secondary" onClick={() => setIsAddingExpense(true)}>
+                    <Plus className="w-4 h-4" /> Add Expense
+                  </Button>
+                )}
+              </div>
+
+              {isAddingExpense && (
+                <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-xl space-y-3">
+                  {expError && <p className="text-sm text-red-600">{expError}</p>}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+                      <select value={expCategory} onChange={(e) => setExpCategory(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white">
+                        {Object.entries(EXPENSE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Description *</label>
+                      <input type="text" value={expDescription} onChange={(e) => setExpDescription(e.target.value)}
+                        placeholder="e.g. Ashoka Banquet Hall"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Amount ($) *</label>
+                      <input type="number" min={0} step="0.01" value={expAmount} onChange={(e) => setExpAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => { setIsAddingExpense(false); setExpError(null); }}>Cancel</Button>
+                    <Button size="sm" onClick={addExpense} isLoading={isSavingExpense}>
+                      <Check className="w-4 h-4" /> Save Expense
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {expenses.length === 0 && !isAddingExpense ? (
+                <div className="text-center py-6">
+                  <Receipt className="w-9 h-9 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No expenses recorded yet.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        <th className="pb-2 pr-4">Category</th>
+                        <th className="pb-2 pr-4">Description</th>
+                        <th className="pb-2 pr-4 text-right">Amount</th>
+                        <th className="pb-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {expenses.map((exp) => (
+                        <tr key={exp.id} className="hover:bg-gray-50">
+                          {editingExpenseId === exp.id ? (
+                            <>
+                              <td className="py-2 pr-4">
+                                <select value={editExpCategory} onChange={(e) => setEditExpCategory(e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                  {Object.entries(EXPENSE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                                </select>
+                              </td>
+                              <td className="py-2 pr-4">
+                                <input type="text" value={editExpDescription} onChange={(e) => setEditExpDescription(e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              </td>
+                              <td className="py-2 pr-4">
+                                <input type="number" min={0} step="0.01" value={editExpAmount} onChange={(e) => setEditExpAmount(e.target.value)}
+                                  className="w-28 px-2 py-1 border border-gray-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              </td>
+                              <td className="py-2 text-right">
+                                <button onClick={() => saveEditExpense(exp.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg mr-1"><Check className="w-4 h-4" /></button>
+                                <button onClick={() => setEditingExpenseId(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="py-2.5 pr-4">
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{EXPENSE_LABELS[exp.category] ?? exp.category}</span>
+                              </td>
+                              <td className="py-2.5 pr-4 text-gray-700">{exp.description}</td>
+                              <td className="py-2.5 pr-4 text-right font-semibold text-gray-900">${parseFloat(exp.amount).toFixed(2)}</td>
+                              <td className="py-2.5 text-right">
+                                <button onClick={() => { setEditingExpenseId(exp.id); setEditExpCategory(exp.category); setEditExpDescription(exp.description); setEditExpAmount(exp.amount); }}
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg mr-1"><Edit className="w-4 h-4" /></button>
+                                <button onClick={() => deleteExpense(exp.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-300">
+                        <td colSpan={2} className="pt-2 text-sm font-semibold text-gray-700">Total Expenses</td>
+                        <td className="pt-2 text-right font-bold text-gray-900">${totalExpenses.toFixed(2)}</td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+
+              {/* Category breakdown */}
+              {Object.keys(byCategory).length > 1 && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">By category</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(byCategory).map(([cat, total]) => (
+                      <span key={cat} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                        {EXPENSE_LABELS[cat] ?? cat}: <strong>${total.toFixed(2)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })()}
       </div>
     </DashboardLayout>
   );
