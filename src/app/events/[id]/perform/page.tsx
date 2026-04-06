@@ -504,11 +504,39 @@ export default function PerformancePage({ params }: { params: Promise<{ id: stri
                   provided contact details are accurate.
                 </li>
                 <li>
-                  TGROC may photograph or record the performance for archival and promotional purposes.
+                  Performance content must be non-religious and must not include any derogatory or discriminatory 
+                  references on Caste, Religion, Language, Race, Gender, Sexual Orientation, Disability, Age or any other basis.
                 </li>
                 <li>
-                  {/* Content will be updated by the organizers */}
-                  [Additional terms and conditions to be added by TGROC organizers.]
+                  All performances MUST be in Tamil language. Exceptions may be considered only with 
+                  prior board approval for valid reasons.
+                </li>
+                <li>
+                  If multiple groups/individuals register the same or very similar performance 
+                  content/music/song, preference will be given to first-come basis. TGROC reserves 
+                  the right to request changes to ensure a diverse program lineup.
+                </li>
+                <li>
+                  Photos and videos may be captured during events for documentation, promotional, 
+                  and community engagement purposes.
+                </li>
+                <li>
+                  Individuals may request removal of their invidual photos / videos by contacting 
+                  TGROC. However, once photos/videos are published on public platforms, TGROC 
+                  cannot guarantee complete removal from all sources.
+                </li>
+                <li>
+                  Individuals who do not want their photos/videos to be taken or published are 
+                  advised not to participate in any group photos/videos.
+                </li>
+                <li>
+                  Participants and guests who take photos/videos during the event are expected to 
+                  respect the privacy and preferences of others. All media shared must be respectful, appropriate and aligned with the organizational values of TGROC.
+                </li>
+                <li>
+                  Use of Photos/Videos taken during TGROC events for personal, commercial, political 
+                  or religious promotional purposes is strictly prohibited without explicit written 
+                  permission from TGROC board.
                 </li>
               </ol>
             </div>
