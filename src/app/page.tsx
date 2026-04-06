@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Users, Shield, Bell, LogIn } from "lucide-react";
 
 export default function Home() {
@@ -7,9 +8,7 @@ export default function Home() {
       {/* Header */}
       <header className="px-6 py-4 flex items-center justify-between max-w-7xl mx-auto">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-            <span className="text-blue-900 font-bold text-lg">T</span>
-          </div>
+          <Image src="/logo.jpg" alt="TGROC Logo" width={40} height={40} className="rounded-lg object-cover" />
           <span className="text-white font-bold text-xl">TGROC</span>
         </div>
         <Link

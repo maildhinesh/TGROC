@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import Image from "next/image";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 import { loginSchema, LoginInput } from "@/lib/validations";
 
@@ -80,9 +81,7 @@ function LoginContent() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-blue-900 font-bold text-2xl">T</span>
-          </div>
+          <Image src="/logo.jpg" alt="TGROC Logo" width={64} height={64} className="rounded-2xl object-cover mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-white">TGROC</h1>
           <p className="text-blue-200 mt-1">Member Portal</p>
         </div>

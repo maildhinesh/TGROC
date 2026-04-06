@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -88,9 +89,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         {/* Logo */}
         <div className="flex items-center justify-between p-5 border-b border-blue-800">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-blue-900 font-bold">T</span>
-            </div>
+            <Image src="/logo.jpg" alt="TGROC Logo" width={36} height={36} className="rounded-lg object-cover" />
             <div>
               <p className="font-bold text-lg leading-tight">TGROC</p>
               <p className="text-xs text-blue-300">Member Portal</p>

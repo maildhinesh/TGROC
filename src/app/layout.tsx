@@ -7,6 +7,9 @@ import { authOptions } from "@/lib/auth";
 export const metadata: Metadata = {
   title: "TGROC Member Portal",
   description: "Member portal for TGROC – Telugu cultural organization",
+  icons: {
+    icon: "/logo.jpg",
+  },
 };
 
 export default async function RootLayout({
