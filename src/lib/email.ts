@@ -118,6 +118,76 @@ If you have any questions, please contact a TGROC officer.
 }
 
 // ---------------------------------------------------------------------------
+// New member self-registration — notify admins to review and approve
+// ---------------------------------------------------------------------------
+
+export async function sendNewMemberNotificationToAdmins(opts: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  membershipType: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  const { firstName, lastName, email, membershipType } = opts;
+  const appUrl = (process.env.NEXTAUTH_URL ?? "").replace(/\/$/, "");
+  const usersUrl = `${appUrl}/admin/users`;
+
+  const membershipLabel = membershipType
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">New Member Registration</h1>
+    <p style="color:#bfdbfe;margin:8px 0 0;">TGROC Member Portal — Action Required</p>
+  </div>
+  <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 12px 12px;">
+    <p>A new member has registered on the TGROC Member Portal and is awaiting approval.</p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
+      <p style="margin:0 0 8px;font-size:14px;color:#374151;"><strong>Name:</strong> ${firstName} ${lastName}</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#374151;"><strong>Email:</strong> ${email}</p>
+      <p style="margin:0;font-size:14px;color:#374151;"><strong>Membership Type:</strong> ${membershipLabel}</p>
+    </div>
+    <p>Please verify their membership fee payment and approve or reject their account in the admin portal.</p>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${usersUrl}" style="display:inline-block;background:#2563eb;color:#fff;font-size:15px;font-weight:bold;text-decoration:none;padding:12px 28px;border-radius:6px;">
+        Review in Admin Portal &#8594;
+      </a>
+    </div>
+    <p style="color:#6b7280;font-size:13px;margin-top:24px;">&#8212; TGROC Member Portal</p>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+New Member Registration — Action Required
+
+A new member has registered on the TGROC Member Portal and is awaiting approval.
+
+Name: ${firstName} ${lastName}
+Email: ${email}
+Membership Type: ${membershipLabel}
+
+Please verify their membership fee payment and approve or reject their account.
+
+Review here: ${usersUrl}
+
+— TGROC Member Portal
+  `.trim();
+
+  return sendEmail({
+    to: ["treasurer@tgroc.org", "admin@tgroc.org"],
+    subject: `New Member Registration: ${firstName} ${lastName}`,
+    html,
+    text,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Event published — announce to all active members
 // ---------------------------------------------------------------------------
 

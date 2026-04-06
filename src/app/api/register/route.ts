@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { registerSchema } from "@/lib/validations";
+import { sendNewMemberNotificationToAdmins } from "@/lib/email";
 
 // POST /api/register - Self-registration
 export async function POST(req: NextRequest) {
@@ -49,6 +50,13 @@ export async function POST(req: NextRequest) {
     },
     select: { id: true, email: true, name: true, status: true },
   });
+
+  // Notify admins/treasurer to review and approve the new registration
+  try {
+    await sendNewMemberNotificationToAdmins({ firstName, lastName, email, membershipType });
+  } catch {
+    // Non-fatal — registration succeeds even if email fails
+  }
 
   return NextResponse.json(
     {
