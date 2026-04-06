@@ -138,9 +138,11 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
   }
 
   const eventDate = new Date(event.eventDate);
-  const dayName = eventDate.toLocaleDateString("en-US", { weekday: "long" });
-  const monthDay = eventDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  const time = eventDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  const dayName = eventDate.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
+  const monthDay = eventDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" });
+  const time = eventDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "America/New_York" });
+  const tzLabel = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "short" })
+    .formatToParts(eventDate).find(p => p.type === "timeZoneName")?.value ?? "ET";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -187,7 +189,7 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
                 <p className="text-gray-500 text-xs">{monthDay}</p>
               </EventDetail>
               <EventDetail icon={<Clock className="w-5 h-5 text-indigo-500" />} label="Time">
-                <p className="font-semibold text-gray-900 text-sm">{time}</p>
+                <p className="font-semibold text-gray-900 text-sm">{time} <span className="text-gray-400 font-normal text-xs">{tzLabel}</span></p>
               </EventDetail>
               <EventDetail icon={<MapPin className="w-5 h-5 text-indigo-500" />} label="Venue" fullWidth>
                 <p className="font-semibold text-gray-900 text-sm">{event.venue}</p>

@@ -16,6 +16,14 @@ export default function NewEventPage() {
   const [description, setDescription] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [eventTime, setEventTime] = useState("");
+  const [timezone, setTimezone] = useState<"EDT" | "EST">(() => {
+    // Auto-detect current Eastern timezone (EDT in summer, EST in winter)
+    const tzName = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      timeZoneName: "short",
+    }).formatToParts(new Date()).find(p => p.type === "timeZoneName")?.value ?? "EDT";
+    return tzName as "EDT" | "EST";
+  });
   const [venue, setVenue] = useState("");
   const [status, setStatus] = useState("DRAFT");
 
@@ -51,7 +59,10 @@ export default function NewEventPage() {
     setIsLoading(true);
     setServerError(null);
 
-    const combinedDateTime = eventTime ? `${eventDate}T${eventTime}` : `${eventDate}T00:00`;
+    const offset = timezone === "EDT" ? "-04:00" : "-05:00";
+    const combinedDateTime = eventTime
+      ? `${eventDate}T${eventTime}:00${offset}`
+      : `${eventDate}T00:00:00${offset}`;
 
     const res = await fetch("/api/events", {
       method: "POST",
@@ -117,7 +128,7 @@ export default function NewEventPage() {
                   placeholder="Brief description of the event..."
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <Input
                   label="Event Date"
                   type="date"
@@ -132,6 +143,17 @@ export default function NewEventPage() {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEventTime(e.target.value)}
                   hint="Optional"
                 />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
+                  <select
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value as "EDT" | "EST")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="EDT">EDT — Eastern Daylight (UTC−4)</option>
+                    <option value="EST">EST — Eastern Standard (UTC−5)</option>
+                  </select>
+                </div>
               </div>
               <Input
                 label="Venue"

@@ -18,6 +18,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
   const [description, setDescription] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [eventTime, setEventTime] = useState("");
+  const [timezone, setTimezone] = useState<"EDT" | "EST">("EDT");
   const [venue, setVenue] = useState("");
   const [status, setStatus] = useState("DRAFT");
 
@@ -63,10 +64,19 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
       .then(({ event }) => {
         if (event) {
           const dt = new Date(event.eventDate);
+          const parts = new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/New_York",
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", hour12: false,
+            timeZoneName: "short",
+          }).formatToParts(dt);
+          const get = (t: string) => parts.find(p => p.type === t)?.value ?? "";
+          const hour = get("hour") === "24" ? "00" : get("hour");
           setName(event.name);
           setDescription(event.description ?? "");
-          setEventDate(dt.toISOString().split("T")[0]);
-          setEventTime(dt.toTimeString().slice(0, 5));
+          setEventDate(`${get("year")}-${get("month")}-${get("day")}`);
+          setEventTime(`${hour}:${get("minute")}`);
+          setTimezone((get("timeZoneName") as "EDT" | "EST") ?? "EDT");
           setVenue(event.venue);
           setStatus(event.status);
           setCurrentPosterUrl(event.posterUrl ?? null);
@@ -81,7 +91,10 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
     setIsLoading(true);
     setServerError(null);
 
-    const combinedDateTime = eventTime ? `${eventDate}T${eventTime}` : `${eventDate}T00:00`;
+    const offset = timezone === "EDT" ? "-04:00" : "-05:00";
+    const combinedDateTime = eventTime
+      ? `${eventDate}T${eventTime}:00${offset}`
+      : `${eventDate}T00:00:00${offset}`;
 
     const res = await fetch(`/api/events/${id}`, {
       method: "PATCH",
@@ -150,7 +163,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <Input
                   label="Event Date"
                   type="date"
@@ -164,6 +177,17 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
                   value={eventTime}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEventTime(e.target.value)}
                 />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
+                  <select
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value as "EDT" | "EST")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="EDT">EDT — Eastern Daylight (UTC−4)</option>
+                    <option value="EST">EST — Eastern Standard (UTC−5)</option>
+                  </select>
+                </div>
               </div>
               <Input
                 label="Venue"

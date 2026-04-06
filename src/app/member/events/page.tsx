@@ -110,7 +110,7 @@ function EventCard({ event, isPast }: { event: MemberEvent; isPast: boolean }) {
   const dateStr = eventDate.toLocaleDateString("en-US", {
     weekday: "short", month: "short", day: "numeric", year: "numeric",
   });
-  const timeStr = eventDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  const timeStr = eventDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "America/New_York" });
 
   // Past event attendance badge
   if (isPast) {
