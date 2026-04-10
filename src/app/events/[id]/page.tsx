@@ -55,6 +55,8 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
   const [attending, setAttending] = useState("YES");
   const [adultCount, setAdultCount] = useState(1);
   const [kidCount, setKidCount] = useState(0);
+  const [vegetarianCount, setVegetarianCount] = useState(0);
+  const [nonVegetarianCount, setNonVegetarianCount] = useState(0);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -101,6 +103,8 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
         attending,
         adultCount: attending === "YES" ? adultCount : 0,
         kidCount: attending === "YES" ? kidCount : 0,
+        vegetarianCount: attending === "YES" ? vegetarianCount : 0,
+        nonVegetarianCount: attending === "YES" ? nonVegetarianCount : 0,
         notes: notes || undefined,
         items: attending === "YES"
           ? Object.entries(itemSelections).map(([itemId, quantity]) => ({ itemId, quantity }))
@@ -177,7 +181,7 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
             <img
               src={event.posterUrl}
               alt={`${event.name} poster`}
-              className="w-full object-cover max-h-80"
+              className="w-full object-contain"
             />
           )}
 
@@ -376,44 +380,77 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
                   </div>
 
                   {attending === "YES" && (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone (optional)</label>
-                        <input
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="+1 (555) 000-0000"
-                        />
+                    <>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Phone (optional)</label>
+                          <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="+1 (555) 000-0000"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Adults (15+) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={adultCount}
+                            onChange={(e) => setAdultCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Kids (under 15)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            value={kidCount}
+                            onChange={(e) => setKidCount(Math.max(0, parseInt(e.target.value) || 0))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
                       </div>
+
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Adults (15+) <span className="text-red-500">*</span>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          🥗 Dietary Preference
+                          <span className="ml-1.5 text-xs text-gray-400 font-normal">(for your entire party)</span>
                         </label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={20}
-                          value={adultCount}
-                          onChange={(e) => setAdultCount(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Vegetarians</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={40}
+                              value={vegetarianCount}
+                              onChange={(e) => setVegetarianCount(Math.max(0, parseInt(e.target.value) || 0))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Non-Vegetarians</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={40}
+                              value={nonVegetarianCount}
+                              onChange={(e) => setNonVegetarianCount(Math.max(0, parseInt(e.target.value) || 0))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Kids (under 15)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={20}
-                          value={kidCount}
-                          onChange={(e) => setKidCount(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
+                    </>
                   )}
 
                   {/* Items to bring — shown when attending YES and event has items */}

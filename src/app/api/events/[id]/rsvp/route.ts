@@ -16,6 +16,8 @@ const rsvpSchema = z.object({
   attending: z.enum(["YES", "NO", "MAYBE"]),
   adultCount: z.number().int().min(0).max(20).default(1),
   kidCount: z.number().int().min(0).max(20).default(0),
+  vegetarianCount: z.number().int().min(0).max(40).default(0),
+  nonVegetarianCount: z.number().int().min(0).max(40).default(0),
   notes: z.string().optional(),
   items: z.array(itemSelectionSchema).optional(),
 });
@@ -36,7 +38,7 @@ export async function GET(
 
   if (full) {
     interface RsvpItem { item: { id: string; name: string }; quantity: number; }
-    interface RsvpRow { id: string; email: string; name: string; phone: string | null; attending: string; adultCount: number; kidCount: number; notes: string | null; items: RsvpItem[]; }
+    interface RsvpRow { id: string; email: string; name: string; phone: string | null; attending: string; adultCount: number; kidCount: number; vegetarianCount: number; nonVegetarianCount: number; notes: string | null; items: RsvpItem[]; }
 
     const members = await prisma.user.findMany({
       where: { role: "MEMBER" },
@@ -54,7 +56,7 @@ export async function GET(
       include: {
         items: { include: { item: { select: { id: true, name: true } } } },
       },
-    })) as RsvpRow[];
+    })) as unknown as RsvpRow[];
 
     const rsvpByEmail = new Map<string, RsvpRow>(rsvps.map((r) => [r.email, r]));
     const memberEmails = new Set(members.map((m: { email: string }) => m.email));
@@ -62,6 +64,7 @@ export async function GET(
     const rows: {
       key: string; name: string; email: string; type: string;
       membershipType: string | null; status: string; adultCount: number; kidCount: number;
+      vegetarianCount: number; nonVegetarianCount: number;
       notes: string | null; items: { name: string; quantity: number }[];
     }[] = [];
 
@@ -78,6 +81,8 @@ export async function GET(
         status: rsvp?.attending ?? "NO_ACTION",
         adultCount: rsvp?.adultCount ?? 0,
         kidCount: rsvp?.kidCount ?? 0,
+        vegetarianCount: rsvp?.vegetarianCount ?? 0,
+        nonVegetarianCount: rsvp?.nonVegetarianCount ?? 0,
         notes: rsvp?.notes ?? null,
         items: rsvp?.items.map((i: RsvpItem) => ({ name: i.item.name, quantity: i.quantity })) ?? [],
       });
@@ -95,6 +100,8 @@ export async function GET(
           status: rsvp.attending,
           adultCount: rsvp.adultCount,
           kidCount: rsvp.kidCount,
+          vegetarianCount: rsvp.vegetarianCount,
+          nonVegetarianCount: rsvp.nonVegetarianCount,
           notes: rsvp.notes,
           items: rsvp.items.map((i: RsvpItem) => ({ name: i.item.name, quantity: i.quantity })),
         });
@@ -144,7 +151,7 @@ export async function POST(
   }
 
   const session = await getServerSession(authOptions);
-  const { name, email, phone, attending, adultCount, kidCount, notes, items } = result.data;
+  const { name, email, phone, attending, adultCount, kidCount, vegetarianCount, nonVegetarianCount, notes, items } = result.data;
 
   // Upsert so the same email can update their RSVP
   const rsvp = await prisma.eventRsvp.upsert({
@@ -155,6 +162,8 @@ export async function POST(
       attending,
       adultCount: attending === "YES" ? (adultCount ?? 1) : 0,
       kidCount: attending === "YES" ? (kidCount ?? 0) : 0,
+      vegetarianCount: attending === "YES" ? (vegetarianCount ?? 0) : 0,
+      nonVegetarianCount: attending === "YES" ? (nonVegetarianCount ?? 0) : 0,
       notes: notes || null,
     },
     create: {
@@ -166,6 +175,8 @@ export async function POST(
       attending,
       adultCount: attending === "YES" ? (adultCount ?? 1) : 0,
       kidCount: attending === "YES" ? (kidCount ?? 0) : 0,
+      vegetarianCount: attending === "YES" ? (vegetarianCount ?? 0) : 0,
+      nonVegetarianCount: attending === "YES" ? (nonVegetarianCount ?? 0) : 0,
       notes: notes || null,
     },
   });

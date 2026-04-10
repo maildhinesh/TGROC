@@ -154,17 +154,19 @@ model Event {
 }
 
 model EventRsvp {
-  id         String     @id @default(cuid())
-  eventId    String
-  userId     String?
-  name       String
-  email      String
-  phone      String?
-  attending  RsvpStatus @default(YES)
-  adultCount Int        @default(1)
-  kidCount   Int        @default(0)
-  notes      String?
-  createdAt  DateTime   @default(now())
+  id                 String     @id @default(cuid())
+  eventId            String
+  userId             String?
+  name               String
+  email              String
+  phone              String?
+  attending          RsvpStatus @default(YES)
+  adultCount         Int        @default(1)
+  kidCount           Int        @default(0)
+  vegetarianCount    Int        @default(0)
+  nonVegetarianCount Int        @default(0)
+  notes              String?
+  createdAt          DateTime   @default(now())
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
