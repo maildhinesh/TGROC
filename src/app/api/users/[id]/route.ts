@@ -107,12 +107,12 @@ export async function PATCH(
         where: { userId: id },
         update: {
           ...profile,
-          dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth) : null,
+          dateOfBirth: profile.dateOfBirth ? new Date(`${profile.dateOfBirth}-01-01`) : null,
         },
         create: {
           userId: id,
           ...profile,
-          dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth) : null,
+          dateOfBirth: profile.dateOfBirth ? new Date(`${profile.dateOfBirth}-01-01`) : null,
         },
       })
     );

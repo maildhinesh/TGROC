@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
           firstName,
           lastName,
           phone: phone || null,
-          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+          dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}-01-01`) : null,
         },
       },
       contactInfo: { create: {} },

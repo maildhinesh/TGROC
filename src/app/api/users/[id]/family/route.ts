@@ -79,7 +79,7 @@ export async function POST(
       relationship: relationship as any,
       firstName,
       lastName,
-      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}-01-01`) : null,
       email: email || null,
       phone: phone || null,
     },

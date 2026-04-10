@@ -34,7 +34,7 @@ export async function PATCH(
     where: { id: memberId, userId: id },
     data: {
       ...rest,
-      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+      dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}-01-01`) : undefined,
       email: email || null,
     },
   });

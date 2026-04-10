@@ -11,7 +11,7 @@ export const registerSchema = z
     lastName: z.string().min(2, "Last name must be at least 2 characters"),
     email: z.string().email("Please enter a valid email"),
     phone: z.string().optional(),
-    dateOfBirth: z.string().optional(),
+    dateOfBirth: z.string().regex(/^\d{4}$/, "Please enter a valid year").optional().or(z.literal("")),
     membershipType: z.enum([
       "INDIVIDUAL",
       "FAMILY",
@@ -29,7 +29,7 @@ export const registerSchema = z
 export const profileSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters"),
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: z.string().regex(/^\d{4}$/, "Please enter a valid year").optional().or(z.literal("")),
   phone: z.string().optional(),
 });
 
@@ -45,7 +45,7 @@ export const familyMemberSchema = z.object({
   relationship: z.enum(["SPOUSE", "CHILD"]),
   firstName: z.string().min(2, "First name must be at least 2 characters"),
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: z.string().regex(/^\d{4}$/, "Please enter a valid year").optional().or(z.literal("")),
   email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
   phone: z.string().optional(),
 });

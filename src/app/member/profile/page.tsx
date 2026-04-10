@@ -8,7 +8,7 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { PageHeader, Card, Button, Input, Spinner } from "@/components/ui";
 import { profileSchema, ProfileInput, familyMemberSchema, FamilyMemberInput, changePasswordSchema, ChangePasswordInput } from "@/lib/validations";
 import { formatDate, getMembershipLabel } from "@/lib/utils";
-import { Save, Plus, Trash2, Users, X, Lock } from "lucide-react";
+import { Save, Plus, Trash2, X, Lock, Pencil } from "lucide-react";
 
 interface FamilyMember {
   id: string;
@@ -38,6 +38,9 @@ export default function MemberProfilePage() {
   const [showAddFamily, setShowAddFamily] = useState(false);
   const [isAddingFamily, setIsAddingFamily] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [isEditingFamily, setIsEditingFamily] = useState(false);
+  const [editFamilyError, setEditFamilyError] = useState<string | null>(null);
 
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
@@ -66,6 +69,15 @@ export default function MemberProfilePage() {
   });
 
   const {
+    register: registerEditFamily,
+    handleSubmit: handleSubmitEditFamily,
+    reset: resetEditFamily,
+    formState: { errors: editFamilyErrors },
+  } = useForm<FamilyMemberInput>({
+    resolver: zodResolver(familyMemberSchema),
+  });
+
+  const {
     register: registerPassword,
     handleSubmit: handleSubmitPassword,
     reset: resetPassword,
@@ -89,7 +101,7 @@ export default function MemberProfilePage() {
             lastName: user.profile.lastName,
             phone: user.profile.phone ?? "",
             dateOfBirth: user.profile.dateOfBirth
-              ? new Date(user.profile.dateOfBirth).toISOString().split("T")[0]
+              ? new Date(user.profile.dateOfBirth).getFullYear().toString()
               : "",
           });
         }
@@ -184,6 +196,40 @@ export default function MemberProfilePage() {
     setFamilyMembers((prev) => prev.filter((m) => m.id !== memberId));
   };
 
+  const startEditFamilyMember = (m: FamilyMember) => {
+    setEditingMemberId(m.id);
+    setEditFamilyError(null);
+    resetEditFamily({
+      relationship: m.relationship as "SPOUSE" | "CHILD",
+      firstName: m.firstName,
+      lastName: m.lastName,
+      dateOfBirth: m.dateOfBirth ? new Date(m.dateOfBirth).getFullYear().toString() : "",
+      email: m.email ?? "",
+      phone: m.phone ?? "",
+    });
+  };
+
+  const onEditFamily = async (data: FamilyMemberInput) => {
+    if (!userId || !editingMemberId) return;
+    setIsEditingFamily(true);
+    setEditFamilyError(null);
+    const res = await fetch(`/api/users/${userId}/family/${editingMemberId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    setIsEditingFamily(false);
+    if (!res.ok) {
+      setEditFamilyError(json.error ?? "Failed to update family member.");
+    } else {
+      setFamilyMembers((prev) =>
+        prev.map((m) => (m.id === editingMemberId ? { ...m, ...json.member } : m))
+      );
+      setEditingMemberId(null);
+    }
+  };
+
   if (isFetching) {
     return (
       <DashboardLayout>
@@ -260,8 +306,11 @@ export default function MemberProfilePage() {
                 />
               </div>
               <Input
-                label="Date of Birth"
-                type="date"
+                label="Year of Birth"
+                type="number"
+                min={1900}
+                max={new Date().getFullYear()}
+                placeholder="e.g. 1985"
                 {...register("dateOfBirth")}
                 hint="Optional"
               />
@@ -336,34 +385,136 @@ export default function MemberProfilePage() {
             >
               {familyMembers.length > 0 && (
                 <div className="mb-4 space-y-2">
-                  {familyMembers.map((m) => (
-                    <div
-                      key={m.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-semibold text-sm">
-                          {m.firstName[0]}
+                  {familyMembers.map((m) =>
+                    editingMemberId === m.id ? (
+                      <form
+                        key={m.id}
+                        onSubmit={handleSubmitEditFamily(onEditFamily)}
+                        className="border border-indigo-200 rounded-xl p-4 space-y-3 bg-indigo-50/40"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className="font-medium text-gray-800 text-sm">Edit Family Member</h4>
+                          <button
+                            type="button"
+                            onClick={() => { setEditingMemberId(null); setEditFamilyError(null); }}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
                         </div>
+
+                        {editFamilyError && (
+                          <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{editFamilyError}</p>
+                        )}
+
                         <div>
-                          <p className="font-medium text-gray-900">
-                            {m.firstName} {m.lastName}
-                          </p>
-                          <p className="text-xs text-gray-500 capitalize">
-                            {m.relationship.toLowerCase()}
-                            {m.dateOfBirth ? ` · Born ${formatDate(m.dateOfBirth)}` : ""}
-                          </p>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Relationship <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            {...registerEditFamily("relationship")}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="SPOUSE">Spouse</option>
+                            <option value="CHILD">Child</option>
+                          </select>
+                          {editFamilyErrors.relationship && (
+                            <p className="mt-1 text-xs text-red-600">{editFamilyErrors.relationship.message}</p>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input
+                            label="First Name"
+                            required
+                            {...registerEditFamily("firstName")}
+                            error={editFamilyErrors.firstName?.message}
+                          />
+                          <Input
+                            label="Last Name"
+                            required
+                            {...registerEditFamily("lastName")}
+                            error={editFamilyErrors.lastName?.message}
+                          />
+                        </div>
+                        <Input
+                          label="Year of Birth"
+                          type="number"
+                          min={1900}
+                          max={new Date().getFullYear()}
+                          placeholder="e.g. 1985"
+                          {...registerEditFamily("dateOfBirth")}
+                          hint="Optional"
+                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input
+                            label="Email (optional)"
+                            type="email"
+                            {...registerEditFamily("email")}
+                            error={editFamilyErrors.email?.message}
+                          />
+                          <Input
+                            label="Phone (optional)"
+                            type="tel"
+                            {...registerEditFamily("phone")}
+                          />
+                        </div>
+
+                        <div className="flex gap-2 justify-end pt-1">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            type="button"
+                            onClick={() => { setEditingMemberId(null); setEditFamilyError(null); }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button size="sm" type="submit" isLoading={isEditingFamily}>
+                            <Save className="w-3.5 h-3.5" />
+                            Save
+                          </Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div
+                        key={m.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-semibold text-sm">
+                            {m.firstName[0]}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {m.firstName} {m.lastName}
+                            </p>
+                            <p className="text-xs text-gray-500 capitalize">
+                              {m.relationship.toLowerCase()}
+                              {m.dateOfBirth ? ` · Born ${new Date(m.dateOfBirth).getFullYear()}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => startEditFamilyMember(m)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Edit"
+                            type="button"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => removeFamilyMember(m.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remove"
+                            type="button"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                      <button
-                        onClick={() => removeFamilyMember(m.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               )}
 
@@ -429,8 +580,11 @@ export default function MemberProfilePage() {
                     />
                   </div>
                   <Input
-                    label="Date of Birth"
-                    type="date"
+                    label="Year of Birth"
+                    type="number"
+                    min={1900}
+                    max={new Date().getFullYear()}
+                    placeholder="e.g. 1985"
                     {...registerFamily("dateOfBirth")}
                     hint="Optional"
                   />

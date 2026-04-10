@@ -55,7 +55,7 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
             lastName: user.profile?.lastName ?? "",
             phone: user.profile?.phone ?? "",
             dateOfBirth: user.profile?.dateOfBirth
-              ? new Date(user.profile.dateOfBirth).toISOString().split("T")[0]
+              ? new Date(user.profile.dateOfBirth).getFullYear().toString()
               : "",
             role: user.role,
             status: user.status,
@@ -152,8 +152,11 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
                 {...register("phone")}
               />
               <Input
-                label="Date of Birth"
-                type="date"
+                label="Year of Birth"
+                type="number"
+                min={1900}
+                max={new Date().getFullYear()}
+                placeholder="e.g. 1985"
                 {...register("dateOfBirth")}
               />
             </div>

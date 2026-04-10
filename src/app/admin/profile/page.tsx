@@ -72,9 +72,9 @@ export default async function AdminProfilePage() {
             {user.profile?.dateOfBirth && (
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">
-                  Date of Birth
+                  Year of Birth
                 </p>
-                <p className="text-sm text-gray-800">{formatDate(user.profile.dateOfBirth)}</p>
+                <p className="text-sm text-gray-800">{new Date(user.profile.dateOfBirth).getFullYear()}</p>
               </div>
             )}
           </div>
