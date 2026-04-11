@@ -80,6 +80,23 @@ enum ExpenseCategory {
   MISCELLANEOUS
 }
 
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum CouponStatus {
+  DRAFT
+  PUBLISHED
+  EXPIRED
+}
+
+enum MemberCouponStatus {
+  ACTIVE
+  REDEEMED
+  EXPIRED
+}
+
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
@@ -108,6 +125,8 @@ model User {
   membershipReminders      MembershipExpiryReminder[]
   checkIns                 EventCheckIn[]
   expenses                 EventExpense[]
+  coupons                  Coupon[]
+  memberCoupons            MemberCoupon[]
 
   @@map("users")
 }
@@ -421,4 +440,43 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+model Coupon {
+  id              String       @id @default(cuid())
+  title           String
+  businessName    String
+  businessAddress String?
+  businessHours   String?      @db.Text
+  contactNumbers  String?
+  logoUrl         String?
+  discountType    DiscountType
+  discountValue   Decimal      @db.Decimal(10, 2)
+  expiryDate      DateTime
+  description     String?      @db.Text
+  status          CouponStatus @default(DRAFT)
+  createdById     String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  createdBy     User           @relation(fields: [createdById], references: [id])
+  memberCoupons MemberCoupon[]
+
+  @@map("coupons")
+}
+
+model MemberCoupon {
+  id         String             @id @default(cuid())
+  couponId   String
+  userId     String
+  code       String             @unique
+  status     MemberCouponStatus @default(ACTIVE)
+  redeemedAt DateTime?
+  createdAt  DateTime           @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, userId])
+  @@map("member_coupons")
 }

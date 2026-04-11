@@ -16,6 +16,7 @@ import {
   ChevronDown,
   DollarSign,
   CalendarDays,
+  Ticket,
 } from "lucide-react";
 import { useState } from "react";
 import { cn, getRoleLabel } from "@/lib/utils";
@@ -33,6 +34,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
   { href: "/admin/users", label: "Users", icon: <Users className="w-5 h-5" /> },
   { href: "/events/manage", label: "Events", icon: <CalendarDays className="w-5 h-5" /> },
+  { href: "/admin/coupons", label: "Coupons", icon: <Ticket className="w-5 h-5" /> },
   { href: "/fees", label: "Membership Fees", icon: <DollarSign className="w-5 h-5" /> },
   { href: "/admin/profile", label: "My Profile", icon: <UserCircle className="w-5 h-5" /> },
 ];
@@ -41,6 +43,7 @@ const OFFICER_NAV: NavItem[] = [
   { href: "/officer", label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
   { href: "/officer/members", label: "Members", icon: <Users className="w-5 h-5" /> },
   { href: "/events/manage", label: "Events", icon: <CalendarDays className="w-5 h-5" /> },
+  { href: "/admin/coupons", label: "Coupons", icon: <Ticket className="w-5 h-5" /> },
   { href: "/fees", label: "Membership Fees", icon: <DollarSign className="w-5 h-5" /> },
   { href: "/officer/profile", label: "My Profile", icon: <UserCircle className="w-5 h-5" /> },
 ];
@@ -48,6 +51,7 @@ const OFFICER_NAV: NavItem[] = [
 const MEMBER_NAV: NavItem[] = [
   { href: "/member", label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
   { href: "/member/events", label: "Events", icon: <CalendarDays className="w-5 h-5" /> },
+  { href: "/member/coupons", label: "My Coupons", icon: <Ticket className="w-5 h-5" /> },
   { href: "/member/profile", label: "Profile", icon: <UserCircle className="w-5 h-5" /> },
   { href: "/member/contact", label: "Contact Info", icon: <MapPin className="w-5 h-5" /> },
   { href: "/member/notifications", label: "Notifications", icon: <Bell className="w-5 h-5" /> },
