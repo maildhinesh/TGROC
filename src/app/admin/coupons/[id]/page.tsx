@@ -171,15 +171,21 @@ export default function CouponDetailPage({ params }: { params: Promise<{ id: str
   const handlePublish = async () => {
     setIsPublishing(true);
     setPublishError(null);
-    const res = await fetch(`/api/coupons/${id}/publish`, { method: "POST" });
-    const json = await res.json();
-    setIsPublishing(false);
-    if (!res.ok) {
-      setPublishError(json.error ?? "Failed to publish.");
-    } else {
-      setPublishSuccess(`Coupon published! Issued to ${json.issued} member(s).`);
-      // Refresh
-      fetch(`/api/coupons/${id}`).then((r) => r.json()).then(({ coupon }) => setCoupon(coupon));
+    try {
+      const couponId = encodeURIComponent(id);
+      const res = await fetch(`/api/coupons/${couponId}/publish`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        setPublishError(json.error ?? "Failed to publish.");
+      } else {
+        setPublishSuccess(`Coupon published! Issued to ${json.issued} member(s).`);
+        // Refresh
+        fetch(`/api/coupons/${couponId}`).then((r) => r.json()).then(({ coupon }) => setCoupon(coupon));
+      }
+    } catch {
+      setPublishError("Failed to publish. Please try again.");
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -187,16 +193,22 @@ export default function CouponDetailPage({ params }: { params: Promise<{ id: str
     setIsIssuingMissing(true);
     setIssueMissingError(null);
     setIssueMissingSuccess(null);
-    const res = await fetch(`/api/coupons/${id}/issue-missing`, { method: "POST" });
-    const json = await res.json();
-    setIsIssuingMissing(false);
-    if (!res.ok) {
-      setIssueMissingError(json.error ?? "Failed to issue coupons.");
-    } else if (json.issued === 0) {
-      setIssueMissingSuccess("All active members already have this coupon.");
-    } else {
-      setIssueMissingSuccess(`Issued to ${json.issued} new member(s).`);
-      fetch(`/api/coupons/${id}`).then((r) => r.json()).then(({ coupon }) => setCoupon(coupon));
+    try {
+      const couponId = encodeURIComponent(id);
+      const res = await fetch(`/api/coupons/${couponId}/issue-missing`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        setIssueMissingError(json.error ?? "Failed to issue coupons.");
+      } else if (json.issued === 0) {
+        setIssueMissingSuccess("All active members already have this coupon.");
+      } else {
+        setIssueMissingSuccess(`Issued to ${json.issued} new member(s).`);
+        fetch(`/api/coupons/${couponId}`).then((r) => r.json()).then(({ coupon }) => setCoupon(coupon));
+      }
+    } catch {
+      setIssueMissingError("Failed to issue coupons. Please try again.");
+    } finally {
+      setIsIssuingMissing(false);
     }
   };
 
