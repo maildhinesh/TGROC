@@ -61,6 +61,10 @@ export default function CouponDetailPage({ params }: { params: Promise<{ id: str
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
 
+  const [isIssuingMissing, setIsIssuingMissing] = useState(false);
+  const [issueMissingError, setIssueMissingError] = useState<string | null>(null);
+  const [issueMissingSuccess, setIssueMissingSuccess] = useState<string | null>(null);
+
   // Edit mode
   const [editing, setEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -179,6 +183,23 @@ export default function CouponDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
+  const handleIssueMissing = async () => {
+    setIsIssuingMissing(true);
+    setIssueMissingError(null);
+    setIssueMissingSuccess(null);
+    const res = await fetch(`/api/coupons/${id}/issue-missing`, { method: "POST" });
+    const json = await res.json();
+    setIsIssuingMissing(false);
+    if (!res.ok) {
+      setIssueMissingError(json.error ?? "Failed to issue coupons.");
+    } else if (json.issued === 0) {
+      setIssueMissingSuccess("All active members already have this coupon.");
+    } else {
+      setIssueMissingSuccess(`Issued to ${json.issued} new member(s).`);
+      fetch(`/api/coupons/${id}`).then((r) => r.json()).then(({ coupon }) => setCoupon(coupon));
+    }
+  };
+
   if (isLoading) return <DashboardLayout><div className="flex justify-center py-20"><Spinner /></div></DashboardLayout>;
   if (!coupon) return <DashboardLayout><p className="p-8 text-gray-500">Coupon not found.</p></DashboardLayout>;
 
@@ -220,6 +241,21 @@ export default function CouponDetailPage({ params }: { params: Promise<{ id: str
         )}
         {publishError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{publishError}</div>}
         {publishSuccess && <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">✓ {publishSuccess}</div>}
+
+        {/* Issue to new members banner — shown when coupon is already published */}
+        {coupon.status === "PUBLISHED" && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-blue-800">Issue to new members</p>
+              <p className="text-sm text-blue-700 mt-0.5">Members who joined after this coupon was published won&apos;t have it yet. Issue it to them now.</p>
+            </div>
+            <Button variant="secondary" onClick={handleIssueMissing} isLoading={isIssuingMissing}>
+              Issue to New Members
+            </Button>
+          </div>
+        )}
+        {issueMissingError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{issueMissingError}</div>}
+        {issueMissingSuccess && <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">✓ {issueMissingSuccess}</div>}
 
         {/* Edit form */}
         {editing ? (
