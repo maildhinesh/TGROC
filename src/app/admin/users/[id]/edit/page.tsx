@@ -22,6 +22,27 @@ const editUserSchema = z.object({
     .enum(["INDIVIDUAL", "FAMILY", "STUDENT_INDIVIDUAL", "STUDENT_FAMILY"])
     .optional()
     .or(z.literal("")),
+  newPassword: z.string().optional(),
+  confirmNewPassword: z.string().optional(),
+}).superRefine((data, ctx) => {
+  const hasPasswordInput = !!data.newPassword || !!data.confirmNewPassword;
+  if (!hasPasswordInput) return;
+
+  if (!data.newPassword || data.newPassword.length < 8) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["newPassword"],
+      message: "New password must be at least 8 characters",
+    });
+  }
+
+  if (data.newPassword !== data.confirmNewPassword) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["confirmNewPassword"],
+      message: "Passwords do not match",
+    });
+  }
 });
 
 type EditUserInput = z.infer<typeof editUserSchema>;
@@ -81,6 +102,7 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
         status: data.status,
         membershipType: data.membershipType || null,
         membershipExpiry: data.membershipExpiry || null,
+        ...(data.newPassword ? { password: data.newPassword } : {}),
         profile: {
           firstName: data.firstName,
           lastName: data.lastName,
@@ -202,6 +224,24 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
                 type="date"
                 {...register("membershipExpiry")}
                 hint="Annual membership runs April 1 – March 31"
+              />
+            </div>
+          </Card>
+
+          <Card title="Reset Password" description="Set a new password for this user.">
+            <div className="space-y-4">
+              <Input
+                label="New Password"
+                type="password"
+                {...register("newPassword")}
+                error={errors.newPassword?.message}
+                hint="Leave blank to keep the existing password"
+              />
+              <Input
+                label="Confirm New Password"
+                type="password"
+                {...register("confirmNewPassword")}
+                error={errors.confirmNewPassword?.message}
               />
             </div>
           </Card>
