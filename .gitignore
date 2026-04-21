@@ -30,6 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# environments
+.env*
+
+#vercel
+.vercel
 
 # typescript
 *.tsbuildinfo

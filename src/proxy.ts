@@ -20,8 +20,12 @@ export default withAuth(
       }
     }
 
-    // Admin-only routes
-    if (pathname.startsWith("/admin") && role !== "ADMIN") {
+    // Admin-only routes (office bearers are allowed to access coupon management)
+    if (
+      pathname.startsWith("/admin") &&
+      role !== "ADMIN" &&
+      !(role === "OFFICE_BEARER" && pathname.startsWith("/admin/coupons"))
+    ) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
