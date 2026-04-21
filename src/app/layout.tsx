@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "TGROC Member Portal",
-  description: "Member portal for TGROC – Telugu cultural organization",
+  description: "Member portal for TGROC – Tamils of Greater Rochester",
   icons: {
     icon: "/logo.jpg",
   },

@@ -1,6 +1,6 @@
 # TGROC Member Portal
 
-A full-featured member management portal for **TGROC** (Telugu cultural organization), built with Next.js, TypeScript, Prisma ORM, and NextAuth.js.
+A full-featured member management portal for **TGROC** (The Tamils of Greater Rochester), built with Next.js, TypeScript, Prisma ORM, and NextAuth.js.
 
 ---
 
