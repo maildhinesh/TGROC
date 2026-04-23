@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { PageHeader, Card, Button, Input, Spinner } from "@/components/ui";
 import {
-  ArrowLeft, UserCheck, UserPlus, Search, Trash2, Edit2, Check, X, DollarSign,
+  ArrowLeft, UserCheck, UserPlus, Search, Trash2, Edit2, Check, X, DollarSign, Camera,
 } from "lucide-react";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";
@@ -34,12 +34,46 @@ interface RsvpRow {
   kidCount: number;
 }
 
+interface ScanLookupResult {
+  attendee: {
+    rsvpId: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    adultCount: number;
+    kidCount: number;
+    feePaid: boolean;
+  };
+  existingCheckIn: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    adultCount: number;
+    kidCount: number;
+    amountPaid: string | null;
+    paymentNote: string | null;
+    checkedInAt: string;
+  } | null;
+}
+
 interface Event {
   id: string;
   name: string;
   eventDate: string;
   venue: string;
   status: string;
+}
+
+interface ScannedAttendee {
+  rsvpId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  adultCount: number;
+  kidCount: number;
+  feePaid: boolean;
+  alreadyCheckedIn: boolean;
 }
 
 const MGMT_ROLES = ["ADMIN", "OFFICE_BEARER"];
@@ -56,6 +90,15 @@ export default function EventCheckInPage({ params }: { params: Promise<{ id: str
 
   // Search RSVP list
   const [rsvpSearch, setRsvpSearch] = useState("");
+  const [scanCode, setScanCode] = useState("");
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [isScanningCode, setIsScanningCode] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [scannedAttendee, setScannedAttendee] = useState<ScannedAttendee | null>(null);
+  const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => Promise<void> } | null>(null);
+  const isProcessingScanRef = useRef(false);
 
   // Form state (shared for new / walk-in)
   const [showForm, setShowForm] = useState(false);
@@ -125,6 +168,146 @@ export default function EventCheckInPage({ params }: { params: Promise<{ id: str
     setFormError(null);
     setShowForm(true);
   };
+
+  const stopCameraScanner = async () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (!scanner) return;
+
+    try {
+      await scanner.stop();
+    } catch {
+      // ignore stop failures if scanner was already stopped
+    }
+
+    try {
+      await scanner.clear();
+    } catch {
+      // ignore clear failures
+    }
+  };
+
+  const checkInAttendee = async (attendee: ScannedAttendee) => {
+    setIsSaving(true);
+    setFormError(null);
+
+    const res = await fetch(`/api/events/${id}/checkin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: attendee.name,
+        email: attendee.email,
+        phone: attendee.phone || undefined,
+        adultCount: attendee.adultCount,
+        kidCount: attendee.kidCount,
+      }),
+    });
+    const json = await res.json();
+    setIsSaving(false);
+
+    if (!res.ok) {
+      setScanError(json.error ?? "Failed to check in attendee.");
+      return;
+    }
+
+    setCheckIns((prev) => [json.checkIn, ...prev]);
+    setScannedAttendee((prev) => prev ? { ...prev, alreadyCheckedIn: true } : prev);
+    setScanMessage(`${attendee.name} checked in successfully.`);
+    setShowForm(false);
+  };
+
+  const lookupCheckinCode = async (code: string) => {
+    setIsScanningCode(true);
+    setScanError(null);
+    setScanMessage(null);
+
+    const res = await fetch(`/api/events/${id}/checkin/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    const json = await res.json();
+    setIsScanningCode(false);
+
+    if (!res.ok) {
+      setScannedAttendee(null);
+      setScanError(json.error ?? "Failed to read check-in code.");
+      return;
+    }
+
+    const data = json as ScanLookupResult;
+    setScannedAttendee({
+      ...data.attendee,
+      alreadyCheckedIn: !!data.existingCheckIn,
+    });
+
+    if (data.existingCheckIn) {
+      setScanMessage(`${data.attendee.name} is already checked in.`);
+      setShowForm(false);
+      return;
+    }
+
+    setFormName(data.attendee.name);
+    setFormEmail(data.attendee.email);
+    setFormPhone(data.attendee.phone ?? "");
+    setFormAdults(data.attendee.adultCount);
+    setFormKids(data.attendee.kidCount);
+    setFormAmountPaid("");
+    setFormPaymentNote("");
+    setFormError(null);
+    setShowForm(false);
+    setScanMessage(`${data.attendee.name} loaded. Review and tap Check In.`);
+  };
+
+  const loadAttendeeFromCheckinCode = async () => {
+    if (!scanCode.trim()) {
+      setScanError("Scan or paste a check-in code first.");
+      return;
+    }
+    await lookupCheckinCode(scanCode.trim());
+  };
+
+  const startCameraScanner = async () => {
+    setCameraError(null);
+    setScanError(null);
+    setScanMessage(null);
+
+    try {
+      const { Html5Qrcode } = await import("html5-qrcode");
+      const scanner = new Html5Qrcode("tgroc-checkin-camera-reader", false);
+      scannerRef.current = scanner;
+
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        async (decodedText: string) => {
+          if (isProcessingScanRef.current) return;
+          isProcessingScanRef.current = true;
+          setScanCode(decodedText);
+          await stopCameraScanner();
+          setIsCameraActive(false);
+          await lookupCheckinCode(decodedText);
+          isProcessingScanRef.current = false;
+        },
+        () => {
+          // Ignore per-frame decode errors while scanning.
+        }
+      );
+
+      setIsCameraActive(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to start camera scanner.";
+      setCameraError(message);
+      await stopCameraScanner();
+      setIsCameraActive(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      void stopCameraScanner();
+    };
+  }, []);
 
   const submitCheckIn = async () => {
     if (!formName.trim() || !formEmail.trim()) {
@@ -233,6 +416,85 @@ export default function EventCheckInPage({ params }: { params: Promise<{ id: str
             <p className="text-sm text-yellow-600 mt-1">Collected at door</p>
           </div>
         </div>
+
+        <Card title="Scan Check-In Code" description="Scan or paste the QR code payload to auto-load an attendee.">
+          <div className="space-y-4">
+            {cameraError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{cameraError}</div>
+            )}
+            {scanError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{scanError}</div>
+            )}
+            {scanMessage && !scanError && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">{scanMessage}</div>
+            )}
+            <div className="flex flex-wrap gap-3">
+              {!isCameraActive ? (
+                <Button type="button" variant="secondary" onClick={startCameraScanner}>
+                  <Camera className="w-4 h-4" /> Start Camera Scanner
+                </Button>
+              ) : (
+                <Button type="button" variant="secondary" onClick={() => { void stopCameraScanner(); setIsCameraActive(false); }}>
+                  <X className="w-4 h-4" /> Stop Camera
+                </Button>
+              )}
+            </div>
+            <div
+              id="tgroc-checkin-camera-reader"
+              className={`${isCameraActive ? "block" : "hidden"} overflow-hidden rounded-xl border border-gray-200 bg-black/5 p-2`}
+            />
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Input
+                label="Check-In Code"
+                value={scanCode}
+                onChange={(e) => setScanCode(e.target.value)}
+                placeholder="Scan from QR reader or paste code"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void loadAttendeeFromCheckinCode();
+                  }
+                }}
+              />
+              <div className="sm:pt-7">
+                <Button onClick={loadAttendeeFromCheckinCode} isLoading={isScanningCode}>
+                  <UserCheck className="w-4 h-4" /> Load Attendee
+                </Button>
+              </div>
+            </div>
+            {scannedAttendee && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h4 className="text-base font-semibold text-gray-900">{scannedAttendee.name}</h4>
+                    <p className="text-sm text-gray-500">{scannedAttendee.email}</p>
+                    <p className="mt-2 text-sm text-gray-700">
+                      {scannedAttendee.adultCount + scannedAttendee.kidCount} attendee{scannedAttendee.adultCount + scannedAttendee.kidCount !== 1 ? "s" : ""}
+                      {` · ${scannedAttendee.adultCount} adult${scannedAttendee.adultCount !== 1 ? "s" : ""}`}
+                      {` · ${scannedAttendee.kidCount} kid${scannedAttendee.kidCount !== 1 ? "s" : ""}`}
+                    </p>
+                    <p className="mt-1 text-sm">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${scannedAttendee.feePaid ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                        {scannedAttendee.feePaid ? "Fee paid" : "Fee unpaid"}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="shrink-0">
+                    {scannedAttendee.alreadyCheckedIn ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                        <Check className="w-3 h-3" /> Already checked in
+                      </span>
+                    ) : (
+                      <Button onClick={() => void checkInAttendee(scannedAttendee)} isLoading={isSaving}>
+                        <UserCheck className="w-4 h-4" /> Check In
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
 
         {/* Check-in form */}
         {showForm && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/dashboard-layout";
@@ -42,17 +42,21 @@ interface EventItem {
 
 type SortField = "name" | "email" | "type" | "status" | "adultCount" | "kidCount";
 type SortDir = "asc" | "desc";
+type AttendeeFilter = "ALL" | "UNPAID";
 
 interface Row {
   key: string;
   name: string;
   email: string;
+  phone?: string | null;
   type: "MEMBER" | "GUEST";
   membershipType: string | null;
   status: "YES" | "NO" | "MAYBE" | "NO_ACTION";
   adultCount: number;
   kidCount: number;
   notes: string | null;
+  feePaid?: boolean;
+  amountPaid?: string | null;
   items: { name: string; quantity: number }[];
 }
 
@@ -132,6 +136,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [rows, setRows] = useState<Row[]>([]);
   const [sortField, setSortField] = useState<SortField>("status");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [attendeeFilter, setAttendeeFilter] = useState<AttendeeFilter>("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -178,6 +183,26 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   // RSVP reminders
   const [isSendingRsvpReminder, setIsSendingRsvpReminder] = useState(false);
   const [rsvpReminderResult, setRsvpReminderResult] = useState<{ count: number; emailSent: boolean; emailError?: string } | null>(null);
+  const [isSendingCheckinCodes, setIsSendingCheckinCodes] = useState(false);
+  const [checkinCodeResult, setCheckinCodeResult] = useState<{
+    recipientCount: number;
+    sentCount: number;
+    failedCount: number;
+  } | null>(null);
+  const [updatingFeeEmail, setUpdatingFeeEmail] = useState<string | null>(null);
+  const [updatingAmountEmail, setUpdatingAmountEmail] = useState<string | null>(null);
+  const [isImportingAttendees, setIsImportingAttendees] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    created: number;
+    updated: number;
+    rowErrors: { row: number; error: string }[];
+  } | null>(null);
+  const attendeeImportInputRef = useRef<HTMLInputElement>(null);
+
+  // Publish Evite (announcement email)
+  const [isSendingAnnouncement, setIsSendingAnnouncement] = useState(false);
+  const [announcementResult, setAnnouncementResult] = useState<{ count: number; emailSent: boolean; emailError?: string } | null>(null);
 
   // Expenses
   interface Expense {
@@ -349,6 +374,24 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     setExpenses((prev) => prev.filter((e) => e.id !== expId));
   };
 
+  const publishEvite = async () => {
+    if (!confirm("Send evite announcement emails to all active members?")) return;
+    setIsSendingAnnouncement(true);
+    setAnnouncementResult(null);
+    const res = await fetch(`/api/events/${id}/announce`, { method: "POST" });
+    const json = await res.json();
+    setIsSendingAnnouncement(false);
+    if (!res.ok) {
+      alert(json.error ?? "Failed to send evite emails.");
+    } else {
+      setAnnouncementResult({
+        count: json.recipientCount,
+        emailSent: json.emailSent,
+        emailError: json.emailError ?? undefined,
+      });
+    }
+  };
+
   const sendRsvpReminder = async () => {
     const noActionCount = rows.filter((r) => r.type === "MEMBER" && r.status === "NO_ACTION").length;
     if (!confirm(`Send an RSVP reminder to ${noActionCount} member${noActionCount !== 1 ? "s" : ""} who haven't responded?`)) return;
@@ -366,6 +409,168 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         emailError: json.emailError ?? undefined,
       });
     }
+  };
+
+  const sendCheckinCodes = async () => {
+    const confirmedCount = rows.filter((r) => r.status === "YES").length;
+    if (confirmedCount === 0) {
+      alert("No confirmed attendees to send check-in codes.");
+      return;
+    }
+    if (!confirm(`Send check-in QR codes to ${confirmedCount} confirmed attendee${confirmedCount !== 1 ? "s" : ""}?`)) return;
+
+    setIsSendingCheckinCodes(true);
+    setCheckinCodeResult(null);
+    const res = await fetch(`/api/events/${id}/checkin-code`, { method: "POST" });
+    const json = await res.json();
+    setIsSendingCheckinCodes(false);
+
+    if (!res.ok) {
+      alert(json.error ?? "Failed to send check-in codes.");
+      return;
+    }
+
+    setCheckinCodeResult({
+      recipientCount: json.recipientCount,
+      sentCount: json.sentCount,
+      failedCount: json.failedCount,
+    });
+  };
+
+  const importAttendeesCsv = async (file: File) => {
+    setIsImportingAttendees(true);
+    setImportResult(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch(`/api/events/${id}/rsvp/import`, {
+      method: "POST",
+      body: formData,
+    });
+    const json = await res.json();
+    setIsImportingAttendees(false);
+
+    if (!res.ok) {
+      const rowErrors = Array.isArray(json.rowErrors) && json.rowErrors.length > 0
+        ? `\n\nRow issues:\n${json.rowErrors.slice(0, 8).map((e: { row: number; error: string }) => `Row ${e.row}: ${e.error}`).join("\n")}`
+        : "";
+      alert((json.error ?? "Failed to import attendees.") + rowErrors);
+      return;
+    }
+
+    setImportResult({
+      imported: json.imported ?? 0,
+      created: json.created ?? 0,
+      updated: json.updated ?? 0,
+      rowErrors: json.rowErrors ?? [],
+    });
+
+    const rsvpRes = await fetch(`/api/events/${id}/rsvp?full=1`);
+    const rsvpData = await rsvpRes.json();
+    setRows(rsvpData.rows ?? []);
+  };
+
+  const toggleFeePaid = async (row: Row) => {
+    if (session?.user?.role !== "ADMIN") return;
+    const nextFeePaid = !row.feePaid;
+    const emailKey = row.email.toLowerCase();
+    let nextAmount: number | null = null;
+
+    if (nextFeePaid) {
+      const raw = window.prompt("Enter amount paid", row.amountPaid ?? "0.00");
+      if (raw === null) return;
+      const parsed = parseFloat(raw);
+      if (isNaN(parsed) || parsed < 0) {
+        alert("Please enter a valid non-negative amount.");
+        return;
+      }
+      nextAmount = parsed;
+    }
+
+    setUpdatingFeeEmail(emailKey);
+    const res = await fetch(`/api/events/${id}/rsvp/payment`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: row.email,
+        feePaid: nextFeePaid,
+        amountPaid: nextAmount,
+      }),
+    });
+    const json = await res.json();
+    setUpdatingFeeEmail(null);
+
+    if (!res.ok) {
+      alert(json.error ?? "Failed to update fee status.");
+      return;
+    }
+
+    setRows((prev) => prev.map((r) =>
+      r.email.toLowerCase() === emailKey
+        ? {
+            ...r,
+            feePaid: nextFeePaid,
+            amountPaid: nextFeePaid
+              ? (json.amountPaid != null ? Number(json.amountPaid).toFixed(2) : (nextAmount != null ? nextAmount.toFixed(2) : "0.00"))
+              : null,
+          }
+        : r
+    ));
+  };
+
+  const updateAmountPaid = async (row: Row) => {
+    if (session?.user?.role !== "ADMIN") return;
+    if (row.status === "NO_ACTION") return;
+
+    const raw = window.prompt("Enter amount paid", row.amountPaid ?? "0.00");
+    if (raw === null) return;
+    const parsed = parseFloat(raw);
+    if (isNaN(parsed) || parsed < 0) {
+      alert("Please enter a valid non-negative amount.");
+      return;
+    }
+
+    const emailKey = row.email.toLowerCase();
+    setUpdatingAmountEmail(emailKey);
+    const res = await fetch(`/api/events/${id}/rsvp/payment`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: row.email,
+        feePaid: true,
+        amountPaid: parsed,
+      }),
+    });
+    const json = await res.json();
+    setUpdatingAmountEmail(null);
+
+    if (!res.ok) {
+      alert(json.error ?? "Failed to update amount paid.");
+      return;
+    }
+
+    setRows((prev) => prev.map((r) =>
+      r.email.toLowerCase() === emailKey
+        ? {
+            ...r,
+            feePaid: true,
+            amountPaid: json.amountPaid != null ? Number(json.amountPaid).toFixed(2) : parsed.toFixed(2),
+          }
+        : r
+    ));
+  };
+
+  const handleAttendeeImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      alert("Please upload a CSV file.");
+      e.target.value = "";
+      return;
+    }
+    await importAttendeesCsv(file);
+    e.target.value = "";
   };
 
   const sendFeeReminder = async () => {
@@ -515,7 +720,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       return `"${s.replace(/"/g, '""')}"`;
     };
     const headers = ["Name", "Email", "Type", "Response", "Adults (15+)", "Kids (under 15)", "Items Bringing", "Notes"];
-    const csvRows = sortedRows.map((r) => [
+    const csvRows = visibleRows.map((r) => [
       escape(r.name),
       escape(r.email),
       escape(r.type === "MEMBER" ? "Member" : "Guest"),
@@ -560,6 +765,11 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     else if (sortField === "adultCount") cmp = a.adultCount - b.adultCount;
     else if (sortField === "kidCount") cmp = a.kidCount - b.kidCount;
     return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const visibleRows = sortedRows.filter((row) => {
+    if (attendeeFilter === "UNPAID") return !row.feePaid;
+    return true;
   });
 
   const eviteUrl = typeof window !== "undefined"
@@ -663,6 +873,18 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     >
                       Copy
                     </button>
+                  </div>
+                  <div className="mt-3">
+                    <Button size="sm" onClick={publishEvite} isLoading={isSendingAnnouncement}>
+                      <Globe className="w-4 h-4" /> Publish Evite
+                    </Button>
+                    {announcementResult && (
+                      <p className="text-xs text-green-700 mt-2">
+                        {announcementResult.emailSent
+                          ? `Evite sent to ${announcementResult.count} member(s).`
+                          : `Queued for ${announcementResult.count} member(s) — email delivery pending.`}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -1281,12 +1503,52 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               <p className="text-xs text-gray-400 mt-0.5">{rows.filter(r => r.type === "MEMBER").length} members · {rows.filter(r => r.type === "GUEST").length} guests · click a column header to sort</p>
             </div>
             <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 rounded-lg border border-gray-200 p-1">
+                <Button
+                  size="sm"
+                  variant={attendeeFilter === "ALL" ? "secondary" : "ghost"}
+                  onClick={() => setAttendeeFilter("ALL")}
+                >
+                  All
+                </Button>
+                <Button
+                  size="sm"
+                  variant={attendeeFilter === "UNPAID" ? "secondary" : "ghost"}
+                  onClick={() => setAttendeeFilter("UNPAID")}
+                >
+                  Unpaid
+                </Button>
+              </div>
+              {session?.user?.role === "ADMIN" && (
+                <>
+                  <input
+                    ref={attendeeImportInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={handleAttendeeImportFileChange}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => attendeeImportInputRef.current?.click()}
+                    isLoading={isImportingAttendees}
+                  >
+                    <Download className="w-4 h-4" /> Import Attendees CSV
+                  </Button>
+                </>
+              )}
               {event.status === "PUBLISHED" && noActionCount > 0 && (
                 <Button size="sm" variant="secondary" onClick={sendRsvpReminder} isLoading={isSendingRsvpReminder}>
                   <Bell className="w-4 h-4" /> Remind ({noActionCount})
                 </Button>
               )}
-              {rows.length > 0 && (
+              {event.status === "PUBLISHED" && session?.user?.role === "ADMIN" && (
+                <Button size="sm" variant="secondary" onClick={sendCheckinCodes} isLoading={isSendingCheckinCodes}>
+                  <UserCheck className="w-4 h-4" /> Send Check-in Code
+                </Button>
+              )}
+              {visibleRows.length > 0 && (
                 <Button size="sm" variant="secondary" onClick={handleExportCsv}>
                   <Download className="w-4 h-4" /> Export CSV
                 </Button>
@@ -1304,11 +1566,38 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 : `⚠ Reminder recorded but email could not be sent. ${rsvpReminderResult.emailError ?? ""}`}
             </div>
           )}
-          {rows.length === 0 ? (
+          {checkinCodeResult && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${
+              checkinCodeResult.failedCount === 0
+                ? "bg-green-50 border border-green-200 text-green-700"
+                : "bg-yellow-50 border border-yellow-200 text-yellow-700"
+            }`}>
+              {checkinCodeResult.failedCount === 0
+                ? `✓ Check-in codes sent to ${checkinCodeResult.sentCount} attendee${checkinCodeResult.sentCount !== 1 ? "s" : ""}.`
+                : `⚠ Sent ${checkinCodeResult.sentCount} of ${checkinCodeResult.recipientCount}. ${checkinCodeResult.failedCount} failed.`}
+            </div>
+          )}
+          {importResult && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${
+              importResult.rowErrors.length > 0
+                ? "bg-yellow-50 border border-yellow-200 text-yellow-700"
+                : "bg-green-50 border border-green-200 text-green-700"
+            }`}>
+              {`Imported ${importResult.imported} row(s): ${importResult.created} created, ${importResult.updated} updated.`}
+              {importResult.rowErrors.length > 0 && (
+                <p className="mt-1 text-xs">
+                  {`${importResult.rowErrors.length} row(s) were skipped due to validation errors.`}
+                </p>
+              )}
+            </div>
+          )}
+          {visibleRows.length === 0 ? (
             <div className="text-center py-6">
               <Users className="w-10 h-10 text-gray-200 mx-auto mb-2" />
               <p className="text-sm text-gray-400">
-                {event.status === "PUBLISHED" ? "No responses yet. Share the evite link to start collecting RSVPs." : "Publish this event to start collecting RSVPs."}
+                {rows.length === 0
+                  ? (event.status === "PUBLISHED" ? "No responses yet. Share the evite link to start collecting RSVPs." : "Publish this event to start collecting RSVPs.")
+                  : "No attendees match the current filter."}
               </p>
             </div>
           ) : (
@@ -1322,12 +1611,14 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                     <SortTh label="Response" field="status" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
                     <SortTh label="Adults" field="adultCount" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
                     <SortTh label="Kids" field="kidCount" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+                    <th className="text-left pb-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-wide">Amount Paid</th>
+                    <th className="text-left pb-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-wide">Fee Paid</th>
                     <th className="text-left pb-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-wide">Bringing</th>
                     <th className="text-left pb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Notes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {sortedRows.map((row) => (
+                  {visibleRows.map((row) => (
                     <tr key={row.key} className={row.status === "NO_ACTION" ? "opacity-50" : ""}>
                       <td className="py-2.5 pr-4 font-medium text-gray-900">{row.name}</td>
                       <td className="py-2.5 pr-4 text-gray-500 text-xs">{row.email}</td>
@@ -1346,6 +1637,40 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                       </td>
                       <td className="py-2.5 pr-4 text-gray-600 text-center">
                         {row.status === "YES" ? row.kidCount : "—"}
+                      </td>
+                      <td className="py-2.5 pr-4 text-xs">
+                        {session?.user?.role === "ADMIN" ? (
+                          <button
+                            type="button"
+                            className="text-left text-xs text-blue-700 hover:text-blue-900 underline disabled:text-gray-400 disabled:no-underline"
+                            onClick={() => updateAmountPaid(row)}
+                            disabled={row.status === "NO_ACTION" || updatingAmountEmail === row.email.toLowerCase()}
+                          >
+                            {updatingAmountEmail === row.email.toLowerCase()
+                              ? "Updating..."
+                              : (row.amountPaid ? `$${Number(row.amountPaid).toFixed(2)}` : "Set amount")}
+                          </button>
+                        ) : (
+                          <span className="text-gray-700">{row.amountPaid ? `$${Number(row.amountPaid).toFixed(2)}` : "—"}</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-4 text-xs">
+                        {session?.user?.role === "ADMIN" ? (
+                          <Button
+                            size="sm"
+                            variant={row.feePaid ? "secondary" : "ghost"}
+                            onClick={() => toggleFeePaid(row)}
+                            disabled={row.status === "NO_ACTION"}
+                            isLoading={updatingFeeEmail === row.email.toLowerCase()}
+                          >
+                            {row.feePaid ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                            {row.feePaid ? "Paid" : "Unpaid"}
+                          </Button>
+                        ) : (
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${row.feePaid ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                            {row.feePaid ? "Paid" : "Unpaid"}
+                          </span>
+                        )}
                       </td>
                       <td className="py-2.5 pr-4 text-xs text-gray-700">
                         {row.items.length > 0

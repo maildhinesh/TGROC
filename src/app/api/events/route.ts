@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
         posterUrl: true,
         rsvps: {
           where: { email: userEmail },
-          select: { attending: true, guestCount: true },
+          select: { attending: true, adultCount: true, kidCount: true },
           take: 1,
         },
       },
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
       eventDate: Date;
       venue: string;
       posterUrl: string | null;
-      rsvps: { attending: string; guestCount: number }[];
+      rsvps: { attending: string; adultCount: number; kidCount: number }[];
     }) => ({
       id: ev.id,
       name: ev.name,

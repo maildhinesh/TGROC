@@ -4,6 +4,28 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
 
+const FEE_PAID_MARKER = "[FEE_PAID]";
+const AMOUNT_PAID_REGEX = /\[AMOUNT_PAID:([0-9]+(?:\.[0-9]{1,2})?)\]/;
+
+function hasFeePaidMarker(notes: string | null): boolean {
+  return !!notes?.includes(FEE_PAID_MARKER);
+}
+
+function cleanNotes(notes: string | null): string | null {
+  if (!notes) return null;
+  const cleaned = notes
+    .replace(FEE_PAID_MARKER, "")
+    .replace(AMOUNT_PAID_REGEX, "")
+    .trim();
+  return cleaned || null;
+}
+
+function extractAmountPaid(notes: string | null): string | null {
+  if (!notes) return null;
+  const match = notes.match(AMOUNT_PAID_REGEX);
+  return match?.[1] ?? null;
+}
+
 const itemSelectionSchema = z.object({
   itemId: z.string(),
   quantity: z.number().int().min(1).max(999),
@@ -63,7 +85,10 @@ export async function GET(
 
     const rows: {
       key: string; name: string; email: string; type: string;
+      phone: string | null;
       membershipType: string | null; status: string; adultCount: number; kidCount: number;
+      feePaid: boolean;
+      amountPaid: string | null;
       vegetarianCount: number; nonVegetarianCount: number;
       notes: string | null; items: { name: string; quantity: number }[];
     }[] = [];
@@ -77,13 +102,16 @@ export async function GET(
           : member.email,
         email: member.email,
         type: "MEMBER",
+        phone: rsvp?.phone ?? null,
         membershipType: member.membershipType ?? null,
         status: rsvp?.attending ?? "NO_ACTION",
         adultCount: rsvp?.adultCount ?? 0,
         kidCount: rsvp?.kidCount ?? 0,
+        feePaid: hasFeePaidMarker(rsvp?.notes ?? null),
+        amountPaid: extractAmountPaid(rsvp?.notes ?? null),
         vegetarianCount: rsvp?.vegetarianCount ?? 0,
         nonVegetarianCount: rsvp?.nonVegetarianCount ?? 0,
-        notes: rsvp?.notes ?? null,
+        notes: cleanNotes(rsvp?.notes ?? null),
         items: rsvp?.items.map((i: RsvpItem) => ({ name: i.item.name, quantity: i.quantity })) ?? [],
       });
     }
@@ -96,13 +124,16 @@ export async function GET(
           name: rsvp.name,
           email: rsvp.email,
           type: "GUEST",
+          phone: rsvp.phone,
           membershipType: null,
           status: rsvp.attending,
           adultCount: rsvp.adultCount,
           kidCount: rsvp.kidCount,
+          feePaid: hasFeePaidMarker(rsvp.notes),
+          amountPaid: extractAmountPaid(rsvp.notes),
           vegetarianCount: rsvp.vegetarianCount,
           nonVegetarianCount: rsvp.nonVegetarianCount,
-          notes: rsvp.notes,
+          notes: cleanNotes(rsvp.notes),
           items: rsvp.items.map((i: RsvpItem) => ({ name: i.item.name, quantity: i.quantity })),
         });
       }
