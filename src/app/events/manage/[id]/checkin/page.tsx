@@ -277,24 +277,41 @@ export default function EventCheckInPage({ params }: { params: Promise<{ id: str
       const scanner = new Html5Qrcode("tgroc-checkin-camera-reader", false);
       scannerRef.current = scanner;
 
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        async (decodedText: string) => {
-          if (isProcessingScanRef.current) return;
-          isProcessingScanRef.current = true;
-          setScanCode(decodedText);
-          await stopCameraScanner();
-          setIsCameraActive(false);
-          await lookupCheckinCode(decodedText);
-          isProcessingScanRef.current = false;
-        },
-        () => {
-          // Ignore per-frame decode errors while scanning.
-        }
-      );
-
+      // Ensure the scanner container is visible before camera initialization.
       setIsCameraActive(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const onDecode = async (decodedText: string) => {
+        if (isProcessingScanRef.current) return;
+        isProcessingScanRef.current = true;
+        setScanCode(decodedText);
+        await stopCameraScanner();
+        setIsCameraActive(false);
+        await lookupCheckinCode(decodedText);
+        isProcessingScanRef.current = false;
+      };
+
+      const onScanError = () => {
+        // Ignore per-frame decode errors while scanning.
+      };
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 220, height: 220 },
+        aspectRatio: 1,
+      };
+
+      try {
+        await scanner.start({ facingMode: { exact: "environment" } }, config, onDecode, onScanError);
+      } catch {
+        // Fallback for browsers/devices that don't honor facingMode constraints.
+        const cameras = await Html5Qrcode.getCameras();
+        if (!cameras || cameras.length === 0) {
+          throw new Error("No camera device found. Please allow camera access and try again.");
+        }
+        const preferred = cameras.find((c) => /back|rear|environment/i.test(c.label)) ?? cameras[0];
+        await scanner.start(preferred.id, config, onDecode, onScanError);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to start camera scanner.";
       setCameraError(message);
