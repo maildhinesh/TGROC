@@ -34,16 +34,21 @@ export async function POST(
     return NextResponse.json({ error: "Coupon must be published first" }, { status: 400 });
   }
 
-  // Find ACTIVE members who do not yet have a MemberCoupon for this coupon
+  // Find ACTIVE non-expired members who do not yet have a MemberCoupon for this coupon
   const alreadyIssuedUserIds = await prisma.memberCoupon
     .findMany({ where: { couponId: id }, select: { userId: true } })
     .then((rows) => rows.map((r) => r.userId));
 
+  const now = new Date();
   const newMembers = await prisma.user.findMany({
     where: {
       role: "MEMBER",
       status: "ACTIVE",
       id: { notIn: alreadyIssuedUserIds },
+      OR: [
+        { membershipExpiry: null },
+        { membershipExpiry: { gte: now } },
+      ],
     },
     select: { id: true },
   });

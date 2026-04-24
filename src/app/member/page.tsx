@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { formatDate, getMembershipLabel } from "@/lib/utils";
 import Link from "next/link";
 import { UserCircle, MapPin, Bell, Users, ArrowRight, AlertTriangle, Clock } from "lucide-react";
+import { RenewMembershipButton } from "@/components/renew-membership-modal";
 
 export default async function MemberDashboard() {
   const session = await getServerSession(authOptions);
@@ -40,6 +41,21 @@ export default async function MemberDashboard() {
   const hasFamily = user.familyMembers.length > 0;
   const isFamilyMembership =
     user.membershipType === "FAMILY" || user.membershipType === "STUDENT_FAMILY";
+
+  // Fetch current fee for this membership type
+  const nowForFee = new Date();
+  const currentFee = user.membershipType
+    ? await prisma.membershipFee.findFirst({
+        where: {
+          membershipType: user.membershipType,
+          effectiveFrom: { lte: nowForFee },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: nowForFee } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+        select: { amount: true },
+      })
+    : null;
+  const feeForModal = currentFee ? { amount: String(currentFee.amount) } : null;
 
   return (
     <DashboardLayout>
@@ -84,9 +100,11 @@ export default async function MemberDashboard() {
                 </p>
               </div>
             </div>
-            <button className="shrink-0 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-              Renew Membership
-            </button>
+            <RenewMembershipButton
+              membershipType={getMembershipLabel(user.membershipType)}
+              fee={feeForModal}
+              buttonClassName="shrink-0 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            />
           </div>
         )}
 
@@ -103,9 +121,11 @@ export default async function MemberDashboard() {
                 </p>
               </div>
             </div>
-            <button className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-              Renew Membership
-            </button>
+            <RenewMembershipButton
+              membershipType={getMembershipLabel(user.membershipType)}
+              fee={feeForModal}
+              buttonClassName="shrink-0 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            />
           </div>
         )}
 

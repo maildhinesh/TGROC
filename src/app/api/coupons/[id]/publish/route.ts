@@ -37,9 +37,17 @@ export async function POST(
     return NextResponse.json({ error: "Cannot publish an expired coupon" }, { status: 400 });
   }
 
-  // Get all ACTIVE members
+  // Get all ACTIVE members whose membership has not expired
+  const now = new Date();
   const members = await prisma.user.findMany({
-    where: { role: "MEMBER", status: "ACTIVE" },
+    where: {
+      role: "MEMBER",
+      status: "ACTIVE",
+      OR: [
+        { membershipExpiry: null },
+        { membershipExpiry: { gte: now } },
+      ],
+    },
     select: { id: true },
   });
 
