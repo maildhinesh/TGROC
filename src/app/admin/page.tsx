@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { prisma } from "@/lib/db";
 import { StatCard } from "@/components/ui";
-import { Users, UserCheck, UserX, Clock, Activity } from "lucide-react";
+import { Users, UserCheck, UserX, Clock, Activity, CalendarX } from "lucide-react";
 import Link from "next/link";
 import { formatDate, getMembershipLabel, getStatusColor } from "@/lib/utils";
 
@@ -12,12 +12,19 @@ export default async function AdminDashboard() {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "ADMIN") redirect("/dashboard");
 
-  const [totalUsers, activeUsers, pendingUsers, inactiveUsers, recentUsers] =
+  const [totalUsers, activeUsers, pendingUsers, inactiveUsers, expiredMembers, recentUsers] =
     await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { status: "ACTIVE" } }),
       prisma.user.count({ where: { status: "PENDING" } }),
       prisma.user.count({ where: { status: "INACTIVE" } }),
+      prisma.user.count({
+        where: {
+          role: "MEMBER",
+          status: "ACTIVE",
+          membershipExpiry: { lt: new Date() },
+        },
+      }),
       prisma.user.findMany({
         take: 5,
         orderBy: { createdAt: "desc" },
@@ -36,7 +43,7 @@ export default async function AdminDashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard
             title="Total Members"
             value={totalUsers}
@@ -61,6 +68,14 @@ export default async function AdminDashboard() {
             icon={<UserX className="w-5 h-5" />}
             color="red"
           />
+          <Link href="/admin/users?status=ACTIVE" className="block">
+            <StatCard
+              title="Expired Memberships"
+              value={expiredMembers}
+              icon={<CalendarX className="w-5 h-5" />}
+              color="red"
+            />
+          </Link>
         </div>
 
         {/* Quick Actions */}

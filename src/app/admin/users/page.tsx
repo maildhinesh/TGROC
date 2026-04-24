@@ -28,6 +28,7 @@ interface User {
   role: string;
   status: string;
   membershipType: string | null;
+  membershipExpiry: string | null;
   createdAt: string;
   profile: { firstName: string; lastName: string; phone: string | null } | null;
 }
@@ -80,12 +81,13 @@ function AdminUsersContent() {
       const data = await res.json();
       const allUsers: User[] = data.users ?? [];
 
-      const headers = ["Name", "Email", "Role", "Membership Type", "Status", "Phone", "Joined"];
+      const headers = ["Name", "Email", "Role", "Membership Type", "Membership Expiry", "Status", "Phone", "Joined"];
       const rows = allUsers.map((u) => [
         u.profile ? `${u.profile.firstName} ${u.profile.lastName}` : (u.name ?? ""),
         u.email,
         u.role,
         u.membershipType ?? "",
+        u.membershipExpiry ? new Date(u.membershipExpiry).toLocaleDateString() : "",
         u.status,
         u.profile?.phone ?? "",
         new Date(u.createdAt).toLocaleDateString(),
@@ -217,6 +219,7 @@ function AdminUsersContent() {
                   <th className="px-4 py-3">Member</th>
                   <th className="px-4 py-3 hidden md:table-cell">Role</th>
                   <th className="px-4 py-3 hidden lg:table-cell">Membership</th>
+                  <th className="px-4 py-3 hidden xl:table-cell">Expiry</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 hidden sm:table-cell">Joined</th>
                   <th className="px-4 py-3 text-right">Actions</th>
@@ -247,6 +250,16 @@ function AdminUsersContent() {
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell text-sm text-gray-600">
                       {getMembershipLabel(user.membershipType)}
+                    </td>
+                    <td className="px-4 py-3 hidden xl:table-cell text-sm">
+                      {user.membershipExpiry ? (
+                        <span className={new Date(user.membershipExpiry) < new Date() ? "text-red-600 font-medium" : "text-gray-600"}>
+                          {formatDate(user.membershipExpiry)}
+                          {new Date(user.membershipExpiry) < new Date() && " (Expired)"}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={statusVariant[user.status] ?? "default"}>
