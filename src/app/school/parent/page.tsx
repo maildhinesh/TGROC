@@ -1,0 +1,105 @@
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { DashboardLayout } from "@/components/dashboard-layout";
+import { PageHeader } from "@/components/ui";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { getSchoolAccessState, hasAnySchoolRole, isEligibleSchoolParent } from "@/lib/school-auth";
+import ParentWorkspaceClient, { type ParentEnrollment, type ParentStudent, type SchoolYearOption } from "./parent-workspace-client";
+
+export default async function SchoolParentPage() {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    redirect("/auth/login");
+  }
+
+  const accessState = await getSchoolAccessState(session.user.id);
+  if (!accessState || !hasAnySchoolRole(accessState) || !isEligibleSchoolParent(accessState)) {
+    redirect("/school");
+  }
+
+  const [students, years, enrollments, enrollmentSettings] = await Promise.all([
+    prisma.studentProfile.findMany({
+      where: { parentUserId: session.user.id },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    }),
+    prisma.schoolYear.findMany({
+      where: { status: { in: ["PLANNED", "ACTIVE"] } },
+      orderBy: [{ startsOn: "desc" }],
+      select: {
+        id: true,
+        label: true,
+        status: true,
+      },
+    }),
+    prisma.schoolEnrollment.findMany({
+      where: { parentUserId: session.user.id },
+      include: {
+        schoolYear: { select: { id: true, label: true, status: true } },
+        studentProfile: { select: { id: true, firstName: true, lastName: true } },
+        medicalInfo: true,
+        waivers: true,
+      },
+      orderBy: [{ updatedAt: "desc" }],
+    }),
+    prisma.schoolEnrollmentSettings.findFirst({
+      select: { isEnrollmentEnabled: true },
+    }),
+  ]);
+
+  const mappedStudents: ParentStudent[] = students.map((student) => ({
+    ...student,
+    dateOfBirth: student.dateOfBirth.toISOString(),
+    createdAt: student.createdAt.toISOString(),
+    updatedAt: student.updatedAt.toISOString(),
+  }));
+
+  const mappedYears: SchoolYearOption[] = years;
+
+  const mappedEnrollments: ParentEnrollment[] = enrollments.map((enrollment) => ({
+    ...enrollment,
+    submittedAt: enrollment.submittedAt?.toISOString() ?? null,
+    reviewedAt: enrollment.reviewedAt?.toISOString() ?? null,
+    approvedAt: enrollment.approvedAt?.toISOString() ?? null,
+    withdrawnAt: enrollment.withdrawnAt?.toISOString() ?? null,
+    createdAt: enrollment.createdAt.toISOString(),
+    updatedAt: enrollment.updatedAt.toISOString(),
+    schoolYear: {
+      ...enrollment.schoolYear,
+    },
+    studentProfile: {
+      ...enrollment.studentProfile,
+    },
+    medicalInfo: enrollment.medicalInfo
+      ? {
+          ...enrollment.medicalInfo,
+          updatedAt: enrollment.medicalInfo.updatedAt.toISOString(),
+        }
+      : null,
+    waivers: enrollment.waivers
+      ? {
+          ...enrollment.waivers,
+          medicalWaiverAcceptedAt: enrollment.waivers.medicalWaiverAcceptedAt?.toISOString() ?? null,
+          mediaWaiverAcceptedAt: enrollment.waivers.mediaWaiverAcceptedAt?.toISOString() ?? null,
+          updatedAt: enrollment.waivers.updatedAt.toISOString(),
+        }
+      : null,
+  }));
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        <PageHeader
+          title="Parent Enrollment Workspace"
+          description="Create student profiles, draft enrollments, edit details, and submit or withdraw as needed."
+        />
+        <ParentWorkspaceClient
+          initialStudents={mappedStudents}
+          initialYears={mappedYears}
+          initialEnrollments={mappedEnrollments}
+          isEnrollmentEnabled={enrollmentSettings?.isEnrollmentEnabled ?? false}
+        />
+      </div>
+    </DashboardLayout>
+  );
+}

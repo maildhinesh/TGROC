@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Slideshow Widget</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+
+        .slideshow-container {
+            position: relative;
+            max-width: 600px;
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .slide {
+            display: none;
+            width: 100%;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .slide.active {
+            display: block;
+        }
+
+        .slide img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            display: block;
+            background-color: #f0f0f0;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .prev, .next {
+            cursor: pointer;
+            position: absolute;
+            top: 50%;
+            width: auto;
+            margin-top: -22px;
+            padding: 16px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            font-weight: bold;
+            font-size: 18px;
+            transition: 0.3s ease;
+            border-radius: 3px;
+            user-select: none;
+        }
+
+        .next {
+            right: 0;
+        }
+
+        .prev {
+            left: 0;
+        }
+
+        .prev:hover, .next:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .dots-container {
+            text-align: center;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+
+        .dot {
+            cursor: pointer;
+            height: 12px;
+            width: 12px;
+            margin: 0 5px;
+            background-color: #bbb;
+            border-radius: 50%;
+            display: inline-block;
+            transition: background-color 0.3s ease;
+        }
+
+        .dot.active {
+            background-color: #717171;
+        }
+
+        .slide-counter {
+            text-align: center;
+            padding: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="slideshow-container">
+        <div class="slide active">
+            <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop" alt="Slide 1">
+        </div>
+        <div class="slide">
+            <img src="https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=600&h=400&fit=crop" alt="Slide 2">
+        </div>
+        <div class="slide">
+            <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&h=400&fit=crop" alt="Slide 3">
+        </div>
+
+        <a class="prev" onclick="changeSlide(-1)">&#10094;</a>
+        <a class="next" onclick="changeSlide(1)">&#10095;</a>
+
+        <div class="dots-container">
+            <span class="dot active" onclick="currentSlide(0)"></span>
+            <span class="dot" onclick="currentSlide(1)"></span>
+            <span class="dot" onclick="currentSlide(2)"></span>
+        </div>
+
+        <div class="slide-counter">
+            <span id="current-slide">1</span> / 3
+        </div>
+    </div>
+
+    <script>
+        let slideIndex = 0;
+        let autoSlideTimer;
+
+        function changeSlide(n) {
+            showSlide(slideIndex += n);
+            resetAutoSlide();
+        }
+
+        function currentSlide(n) {
+            showSlide(slideIndex = n);
+            resetAutoSlide();
+        }
+
+        function showSlide(n) {
+            const slides = document.querySelectorAll('.slide');
+            const dots = document.querySelectorAll('.dot');
+
+            if (n >= slides.length) slideIndex = 0;
+            if (n < 0) slideIndex = slides.length - 1;
+
+            slides.forEach(slide => slide.classList.remove('active'));
+            dots.forEach(dot => dot.classList.remove('active'));
+
+            slides[slideIndex].classList.add('active');
+            dots[slideIndex].classList.add('active');
+            document.getElementById('current-slide').textContent = slideIndex + 1;
+        }
+
+        function autoSlide() {
+            changeSlide(1);
+            autoSlideTimer = setTimeout(autoSlide, 5000);
+        }
+
+        function resetAutoSlide() {
+            clearTimeout(autoSlideTimer);
+            autoSlideTimer = setTimeout(autoSlide, 5000);
+        }
+
+        // Start automatic slideshow
+        autoSlideTimer = setTimeout(autoSlide, 5000);
+    </script>
+</body>
+</html>

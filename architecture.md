@@ -1,7 +1,7 @@
 # TGROC Member Portal — Architecture Documentation
 
 **Tamils of Greater Rochester (TGROC) Community Member Portal**  
-Stack: Next.js 16 · TypeScript · PostgreSQL · Prisma · NextAuth v4 · Tailwind CSS v4
+Stack: Next.js 16 · TypeScript · PostgreSQL · Prisma · NextAuth v4 · Tailwind CSS v4 · PWA (Service Worker + Web App Manifest)
 
 ---
 
@@ -17,6 +17,7 @@ Stack: Next.js 16 · TypeScript · PostgreSQL · Prisma · NextAuth v4 · Tailwi
 8. [System Flows](#8-system-flows)
 9. [UI Component Library](#9-ui-component-library)
 10. [Configuration & Environment Variables](#10-configuration--environment-variables)
+11. [PWA Architecture](#11-pwa-architecture)
 
 ---
 
@@ -37,6 +38,7 @@ The TGROC Member Portal is a full-stack web application for managing community m
 | **Notifications** | Per-user preference flags for email, SMS, newsletters, event reminders, and membership alerts |
 | **Email Notifications** | Welcome email on user creation (with credentials), event announcement email to all active members on publish, RSVP reminder emails to non-respondents |
 | **Event Day Operations** | Officer/admin check-in flow for RSVPs and walk-ins; tracks adult/kid counts and manual payment collected; expense tracking by category (hall rent, food, supplies, cleaning, miscellaneous) |
+| **Progressive Web App** | Installable web app manifest, service worker registration, offline fallback page, static asset precache, versioned cache cleanup |
 
 ---
 
@@ -111,6 +113,17 @@ The application uses a hybrid rendering approach:
 - **Client Components (`"use client"`):** All interactive pages — forms, tables with sorting, evite RSVP, event management — run in the browser. Data is fetched via `useEffect` calling the Next.js API routes.
 - **API Routes:** All data mutation and sensitive reads go through `/api/**` handlers with full auth checks and Zod validation.
 
+### PWA Runtime Strategy
+
+- **Manifest route:** `src/app/manifest.ts` provides app identity, theme/background colors, start URL, and install icons.
+- **Service worker script:** `public/sw.js` is registered from `src/app/PWARegister.tsx`, which is mounted in the root layout.
+- **Install phase caching:** Core URLs and app icons are precached using a resilient `Promise.allSettled` strategy so one failed resource does not block SW install.
+- **Activate phase cleanup:** Old cache versions are deleted during activation to avoid stale storage growth.
+- **Fetch behavior:**
+   - Network-first for online requests.
+   - For failed navigations, fallback to `/offline`.
+   - For failed asset fetches, fallback to a matching cached response when available.
+
 ---
 
 ## 3. Source Code Structure
@@ -135,6 +148,10 @@ c:\Source\TGROC\
 │       └── 20260405000000_add_checkins_and_expenses/
 │
 ├── public/
+│   ├── sw.js                 # Service worker (install, activate, fetch handlers)
+│   ├── icons/
+│   │   ├── icon-192.png      # PWA install icon (192x192)
+│   │   └── icon-512.png      # PWA install icon (512x512)
 │   └── uploads/
 │       └── events/            # Event poster images (uploaded via API)
 │
@@ -144,7 +161,11 @@ c:\Source\TGROC\
     ├── app/                   # Next.js App Router root
     │   ├── globals.css        # Tailwind base + global styles
     │   ├── layout.tsx         # Root layout: SessionProvider, font, metadata
+   │   ├── manifest.ts        # Web app manifest for installability
+   │   ├── PWARegister.tsx    # Client component that registers /sw.js
     │   ├── page.tsx           # Public landing page
+   │   ├── offline/
+   │   │   └── page.tsx       # Offline fallback screen served by service worker
     │   │
     │   ├── auth/
     │   │   ├── login/page.tsx         # Login form (credentials + social)
@@ -1061,6 +1082,12 @@ Wraps all authenticated pages. Provides:
 |---|---|---|
 | `NODE_ENV` | `development` | Controls Prisma log level (dev logs queries; prod logs errors only) |
 
+### PWA Deployment Notes
+
+- Service worker registration requires a secure context in production (`https://`), or `http://localhost` in development.
+- The app is installable when manifest + icons + service worker are available and valid.
+- Any service worker logic change should also bump cache version in `public/sw.js` to trigger a clean rollout.
+
 ### NPM Scripts
 
 | Script | Command | Purpose |
@@ -1099,4 +1126,48 @@ npm run dev
 
 ---
 
-*Documentation updated: April 5, 2026*
+## 11. PWA Architecture
+
+### Implemented Components
+
+| Component | File | Responsibility |
+|---|---|---|
+| Manifest route | `src/app/manifest.ts` | Defines app name, short name, colors, start URL, display mode, and icons |
+| Service worker | `public/sw.js` | Handles install/activate/fetch lifecycle and cache strategies |
+| SW registration | `src/app/PWARegister.tsx` | Registers service worker on client after app mount |
+| Offline fallback route | `src/app/offline/page.tsx` | Provides user-friendly offline UI for failed navigations |
+
+### Service Worker Lifecycle
+
+```
+Browser loads app
+   │
+   ├─► Root layout mounts PWARegister (client)
+   │       └─► navigator.serviceWorker.register("/sw.js")
+   │
+   ├─► install
+   │       ├─ open current cache version
+   │       ├─ precache key URLs/icons (allSettled)
+   │       └─ skipWaiting()
+   │
+   ├─► activate
+   │       ├─ delete old cache versions
+   │       └─ clients.claim()
+   │
+   └─► fetch
+        ├─ GET requests only
+        ├─ try network first
+        ├─ navigation failure → /offline fallback
+        └─ asset failure → cache match fallback
+```
+
+### Current Cache Scope
+
+- `/`
+- `/offline`
+- `/icons/icon-192.png`
+- `/icons/icon-512.png`
+
+This gives users a minimal but reliable offline experience and keeps installability requirements satisfied.
+
+*Documentation updated: May 4, 2026*

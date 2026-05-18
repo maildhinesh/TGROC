@@ -34,7 +34,7 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
-          include: { profile: true },
+          include: { profile: true, schoolRoleAssignments: true },
         });
 
         if (!user || !user.password) {
@@ -64,6 +64,9 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           image: user.image,
           role: user.role,
+          schoolRoles: user.schoolRoleAssignments
+            .filter((assignment) => assignment.isActive)
+            .map((assignment) => assignment.role),
           status: user.status,
           membershipType: user.membershipType,
         };
@@ -72,56 +75,60 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider !== "credentials") {
-        if (!user.email) return "/auth/login?error=OAuthSignin";
-
-        // For social logins, check if user account is active
-        const dbUser = await prisma.user.findUnique({
-          where: { email: user.email },
-          include: { accounts: true },
-        });
-
-        if (dbUser) {
-          if (dbUser.status === "INACTIVE") {
-            return "/auth/login?error=AccountDeactivated";
-          }
-          if (dbUser.status === "PENDING") {
-            return "/auth/login?error=AccountPending";
-          }
-
-          // If this user was created by an admin (no linked OAuth account for this provider),
-          // link the provider account now so NextAuth doesn't throw OAuthAccountNotLinked.
-          const alreadyLinked = dbUser.accounts.some(
-            (a) => a.provider === account.provider
-          );
-          if (!alreadyLinked) {
-            await prisma.account.create({
-              data: {
-                userId: dbUser.id,
-                type: account.type,
-                provider: account.provider,
-                providerAccountId: account.providerAccountId,
-                access_token: account.access_token ?? null,
-                refresh_token: account.refresh_token ?? null,
-                expires_at: account.expires_at ?? null,
-                token_type: account.token_type ?? null,
-                scope: account.scope ?? null,
-                id_token: account.id_token ?? null,
-                session_state: (account.session_state as string) ?? null,
-              },
-            });
-            // Ensure the rest of the NextAuth flow uses the existing user's id
-            user.id = dbUser.id;
-          }
-        }
-        // If user doesn't exist yet, they'll be created by PrismaAdapter with PENDING status
+      if (!account || account.provider === "credentials") {
+        return true;
       }
+
+      if (!user.email) return "/auth/login?error=OAuthSignin";
+
+      // For social logins, check if user account is active
+      const dbUser = await prisma.user.findUnique({
+        where: { email: user.email },
+        include: { accounts: true },
+      });
+
+      if (dbUser) {
+        if (dbUser.status === "INACTIVE") {
+          return "/auth/login?error=AccountDeactivated";
+        }
+        if (dbUser.status === "PENDING") {
+          return "/auth/login?error=AccountPending";
+        }
+
+        // If this user was created by an admin (no linked OAuth account for this provider),
+        // link the provider account now so NextAuth doesn't throw OAuthAccountNotLinked.
+        const alreadyLinked = dbUser.accounts.some(
+          (a) => a.provider === account.provider
+        );
+        if (!alreadyLinked) {
+          await prisma.account.create({
+            data: {
+              userId: dbUser.id,
+              type: account.type,
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              access_token: account.access_token ?? null,
+              refresh_token: account.refresh_token ?? null,
+              expires_at: account.expires_at ?? null,
+              token_type: account.token_type ?? null,
+              scope: account.scope ?? null,
+              id_token: account.id_token ?? null,
+              session_state: (account.session_state as string) ?? null,
+            },
+          });
+          // Ensure the rest of the NextAuth flow uses the existing user's id
+          user.id = dbUser.id;
+        }
+      }
+
+      // If user doesn't exist yet, they'll be created by PrismaAdapter with PENDING status
       return true;
     },
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
+        token.schoolRoles = ((user as any).schoolRoles ?? []) as any[];
         token.status = (user as any).status;
         token.membershipType = (user as any).membershipType;
       }
@@ -129,6 +136,7 @@ export const authOptions: NextAuthOptions = {
       if (trigger === "update" && session) {
         token.name = session.name;
         token.role = session.role;
+        token.schoolRoles = session.schoolRoles;
         token.status = session.status;
         token.membershipType = session.membershipType;
       }
@@ -137,10 +145,21 @@ export const authOptions: NextAuthOptions = {
       if (token.id && !user) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true, status: true, membershipType: true, name: true },
+          select: {
+            role: true,
+            status: true,
+            membershipType: true,
+            name: true,
+            schoolRoleAssignments: {
+              select: { role: true, isActive: true },
+            },
+          },
         });
         if (dbUser) {
           token.role = dbUser.role;
+          token.schoolRoles = dbUser.schoolRoleAssignments
+            .filter((assignment) => assignment.isActive)
+            .map((assignment) => assignment.role) as any[];
           token.status = dbUser.status;
           token.membershipType = dbUser.membershipType;
         }
@@ -152,6 +171,7 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.id as string;
         session.user.role = token.role as any;
+        session.user.schoolRoles = (token.schoolRoles as any[]) ?? [];
         session.user.status = token.status as any;
         session.user.membershipType = token.membershipType as any;
       }

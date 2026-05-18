@@ -12,6 +12,7 @@ export default withAuth(
 
     const role = token.role as string;
     const status = token.status as string;
+    const schoolRoles = ((token.schoolRoles as string[] | undefined) ?? []).filter(Boolean);
 
     // Deactivated or pending users can only access the restricted page
     if (status === "INACTIVE" || status === "PENDING") {
@@ -48,6 +49,11 @@ export default withAuth(
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
+    // School routes — accessible to users with any active school role
+    if (pathname.startsWith("/school") && schoolRoles.length === 0) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+
     // Redirect to appropriate dashboard based on role
     if (pathname === "/dashboard") {
       if (role === "ADMIN") {
@@ -77,6 +83,7 @@ export const config = {
     "/fees/:path*",
     "/events/manage",
     "/events/manage/:path*",
+    "/school/:path*",
     "/restricted",
   ],
 };

@@ -47,12 +47,22 @@ const editUserSchema = z.object({
 
 type EditUserInput = z.infer<typeof editUserSchema>;
 
+const ALL_SCHOOL_ROLES = [
+  { value: "SCHOOL_PARENT", label: "School Parent" },
+  { value: "SCHOOL_TEACHER", label: "School Teacher" },
+  { value: "SCHOOL_ADMIN", label: "School Admin" },
+] as const;
+
 export default function EditUserPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [schoolRoles, setSchoolRoles] = useState<string[]>([]);
+  const [isSchoolRolesLoading, setIsSchoolRolesLoading] = useState(false);
+  const [schoolRolesError, setSchoolRolesError] = useState<string | null>(null);
+  const [schoolRolesSaved, setSchoolRolesSaved] = useState(false);
 
   const {
     register,
@@ -65,6 +75,20 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
   });
 
   const role = watch("role");
+
+  useEffect(() => {
+    fetch(`/api/users/${id}/school-roles`)
+      .then((r) => r.json())
+      .then(({ assignments }) => {
+        if (assignments) {
+          setSchoolRoles(
+            assignments
+              .filter((a: { role: string; isActive: boolean }) => a.isActive)
+              .map((a: { role: string; isActive: boolean }) => a.role)
+          );
+        }
+      });
+  }, [id]);
 
   useEffect(() => {
     fetch(`/api/users/${id}`)
@@ -243,6 +267,59 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
                 {...register("confirmNewPassword")}
                 error={errors.confirmNewPassword?.message}
               />
+            </div>
+          </Card>
+
+          <Card title="School Roles" description="Assign school roles to this user. Changes save immediately.">
+            <div className="space-y-2">
+              {ALL_SCHOOL_ROLES.map(({ value, label }) => (
+                <label key={value} className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                    checked={schoolRoles.includes(value)}
+                    onChange={(e) => {
+                      setSchoolRoles((prev) =>
+                        e.target.checked ? [...prev, value] : prev.filter((r) => r !== value)
+                      );
+                      setSchoolRolesSaved(false);
+                    }}
+                  />
+                  <span className="text-sm font-medium text-gray-700">{label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                isLoading={isSchoolRolesLoading}
+                onClick={async () => {
+                  setIsSchoolRolesLoading(true);
+                  setSchoolRolesError(null);
+                  setSchoolRolesSaved(false);
+                  const res = await fetch(`/api/users/${id}/school-roles`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ roles: schoolRoles }),
+                  });
+                  setIsSchoolRolesLoading(false);
+                  if (res.ok) {
+                    setSchoolRolesSaved(true);
+                  } else {
+                    const json = await res.json();
+                    setSchoolRolesError(json.error ?? "Failed to save school roles.");
+                  }
+                }}
+              >
+                Save School Roles
+              </Button>
+              {schoolRolesSaved && (
+                <span className="text-sm text-green-600">Saved!</span>
+              )}
+              {schoolRolesError && (
+                <span className="text-sm text-red-600">{schoolRolesError}</span>
+              )}
             </div>
           </Card>
 

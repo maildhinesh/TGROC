@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { formatDate, getMembershipLabel } from "@/lib/utils";
 import Link from "next/link";
-import { UserCircle, MapPin, Bell, Users, ArrowRight, AlertTriangle, Clock } from "lucide-react";
+import { UserCircle, MapPin, Bell, Users, ArrowRight, AlertTriangle, Clock, School2 } from "lucide-react";
 import { RenewMembershipButton } from "@/components/renew-membership-modal";
 
 export default async function MemberDashboard() {
@@ -151,6 +151,13 @@ export default async function MemberDashboard() {
             title="Notifications"
             description="Customize how you receive updates"
             bg="bg-purple-50"
+          />
+          <DashboardCard
+            href="/school/parent"
+            icon={<School2 className="w-7 h-7 text-emerald-600" />}
+            title="Tamil School"
+            description="Enroll students in Aathichudi"
+            bg="bg-emerald-50"
           />
         </div>
 

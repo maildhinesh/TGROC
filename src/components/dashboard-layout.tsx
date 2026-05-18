@@ -17,6 +17,7 @@ import {
   DollarSign,
   CalendarDays,
   Ticket,
+  School,
 } from "lucide-react";
 import { useState } from "react";
 import { cn, getRoleLabel } from "@/lib/utils";
@@ -70,7 +71,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const role = session?.user?.role ?? "MEMBER";
-  const navItems = getNavItems(role);
+  const baseNavItems = getNavItems(role);
+  const navItems =
+    (session?.user?.schoolRoles?.length ?? 0) > 0
+      ? [...baseNavItems, { href: "/school", label: "Tamil School", icon: <School className="w-5 h-5" /> }]
+      : baseNavItems;
 
   return (
     <div className="flex h-screen bg-gray-50">

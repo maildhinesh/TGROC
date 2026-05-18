@@ -97,6 +97,40 @@ enum MemberCouponStatus {
   EXPIRED
 }
 
+enum SchoolRole {
+  SCHOOL_PARENT
+  SCHOOL_TEACHER
+  SCHOOL_ADMIN
+}
+
+enum SchoolEnrollmentStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum SchoolYearStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+enum ClassSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
@@ -127,6 +161,15 @@ model User {
   expenses                 EventExpense[]
   coupons                  Coupon[]
   memberCoupons            MemberCoupon[]
+  schoolRoleAssignments    SchoolUserRole[]
+  ownedStudentProfiles     StudentProfile[]        @relation("StudentParent")
+  parentEnrollments        SchoolEnrollment[]      @relation("EnrollmentParent")
+  reviewedEnrollments      SchoolEnrollment[]      @relation("EnrollmentReviewedBy")
+  teacherClassAssignments  ClassTeacherAssignment[] @relation("ClassTeacher")
+  createdSchoolYears       SchoolYear[]            @relation("SchoolYearUpdatedBy")
+  attendanceMarked         StudentAttendance[]     @relation("AttendanceMarkedBy")
+  gradesMarked             StudentGrade[]          @relation("GradeMarkedBy")
+  schoolEnrollmentSettingsUpdates SchoolEnrollmentSettings[] @relation("SchoolEnrollmentSettingsUpdatedBy")
 
   @@map("users")
 }
@@ -399,6 +442,309 @@ model NotificationSettings {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_settings")
+}
+
+model SchoolEnrollmentSettings {
+  id                   String   @id @default(cuid())
+  isEnrollmentEnabled  Boolean  @default(false)
+  updatedById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  updatedBy User? @relation("SchoolEnrollmentSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("school_enrollment_settings")
+}
+
+model SchoolUserRole {
+  id        String     @id @default(cuid())
+  userId    String
+  role      SchoolRole
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("school_user_roles")
+}
+
+model SchoolYear {
+  id              String          @id @default(cuid())
+  label           String          @unique
+  startsOn        DateTime        @db.Date
+  endsOn          DateTime        @db.Date
+  enrollmentOpenOn  DateTime?     @db.Date
+  enrollmentCloseOn DateTime?     @db.Date
+  status          SchoolYearStatus @default(PLANNED)
+  lastUpdatedById String?
+  lastUpdatedAt   DateTime        @updatedAt
+  createdAt       DateTime        @default(now())
+
+  lastUpdatedBy User? @relation("SchoolYearUpdatedBy", fields: [lastUpdatedById], references: [id], onDelete: SetNull)
+  calendarDays   SchoolCalendarDay[]
+  enrollments    SchoolEnrollment[]
+  classes        SchoolClass[]
+  sessions       ClassSession[]
+  classStudentAssignments ClassStudentAssignment[]
+
+  @@map("school_years")
+}
+
+model SchoolCalendarDay {
+  id           String   @id @default(cuid())
+  schoolYearId String
+  date         DateTime @db.Date
+  isSchoolDay  Boolean  @default(false)
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  schoolYear SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolYearId, date])
+  @@map("school_calendar_days")
+}
+
+model StudentProfile {
+  id                    String   @id @default(cuid())
+  parentUserId          String
+  firstName             String
+  lastName              String
+  dateOfBirth           DateTime @db.Date
+  gender                String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  parent      User @relation("StudentParent", fields: [parentUserId], references: [id], onDelete: Cascade)
+  enrollments SchoolEnrollment[]
+  classAssignments ClassStudentAssignment[]
+  attendanceEntries StudentAttendance[]
+  grades            StudentGrade[]
+
+  @@map("student_profiles")
+}
+
+model SchoolEnrollment {
+  id              String                 @id @default(cuid())
+  schoolYearId    String
+  studentProfileId String
+  parentUserId    String
+  status          SchoolEnrollmentStatus @default(DRAFT)
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedByUserId String?
+  rejectionReason String?
+  approvedAt      DateTime?
+  withdrawnAt     DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  schoolYear    SchoolYear     @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  parent        User           @relation("EnrollmentParent", fields: [parentUserId], references: [id], onDelete: Cascade)
+  reviewedBy    User?          @relation("EnrollmentReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  medicalInfo   EnrollmentMedicalInfo?
+  waivers       EnrollmentWaiver?
+
+  @@unique([studentProfileId, schoolYearId])
+  @@map("school_enrollments")
+}
+
+model EnrollmentMedicalInfo {
+  id                    String   @id @default(cuid())
+  enrollmentId          String   @unique
+  insuranceProviderName String
+  insurancePolicyNumber String
+  insuranceGroupNumber  String?
+  insurancePhone        String?
+  policyHolderName      String?
+  pediatricianName      String
+  pediatricianPhone     String
+  pediatricianAddress   String?
+  medicalNotes          String?
+  updatedAt             DateTime @updatedAt
+
+  enrollment SchoolEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@map("enrollment_medical_info")
+}
+
+model EnrollmentWaiver {
+  id                      String   @id @default(cuid())
+  enrollmentId            String   @unique
+  medicalWaiverAccepted   Boolean  @default(false)
+  medicalWaiverAcceptedAt DateTime?
+  medicalWaiverVersion    Int
+  mediaWaiverAccepted     Boolean  @default(false)
+  mediaWaiverAcceptedAt   DateTime?
+  mediaWaiverVersion      Int
+  acceptedByUserId        String
+  updatedAt               DateTime @updatedAt
+
+  enrollment SchoolEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@map("enrollment_waivers")
+}
+
+model SchoolClass {
+  id          String   @id @default(cuid())
+  schoolYearId String
+  classCode   String
+  className   String
+  levelOrGrade String
+  maxCapacity Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schoolYear SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  teacherAssignments ClassTeacherAssignment[]
+  studentAssignments ClassStudentAssignment[]
+  sessions           ClassSession[]
+  gradeCategories    GradeCategory[]
+  gradeItems         GradeItem[]
+
+  @@unique([schoolYearId, classCode])
+  @@map("school_classes")
+}
+
+model ClassTeacherAssignment {
+  id           String   @id @default(cuid())
+  schoolClassId String
+  teacherUserId String
+  assignedFrom DateTime @default(now())
+  assignedTo   DateTime?
+  createdAt    DateTime @default(now())
+
+  schoolClass SchoolClass @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  teacher    User        @relation("ClassTeacher", fields: [teacherUserId], references: [id], onDelete: Cascade)
+
+  @@map("class_teacher_assignments")
+}
+
+model ClassStudentAssignment {
+  id             String   @id @default(cuid())
+  schoolClassId  String
+  studentProfileId String
+  schoolYearId   String
+  assignedOn     DateTime @default(now())
+  removedOn      DateTime?
+  createdAt      DateTime @default(now())
+
+  schoolClass   SchoolClass   @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  schoolYear    SchoolYear    @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+
+  @@map("class_student_assignments")
+}
+
+model CampusClassroom {
+  id        String   @id @default(cuid())
+  roomCode  String   @unique
+  roomName  String
+  capacity  Int?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions ClassSession[]
+
+  @@map("campus_classrooms")
+}
+
+model ClassSession {
+  id          String            @id @default(cuid())
+  schoolYearId String
+  schoolClassId String
+  calendarDate DateTime         @db.Date
+  startTime   DateTime
+  endTime     DateTime
+  classroomId String
+  status      ClassSessionStatus @default(SCHEDULED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  schoolYear SchoolYear     @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  schoolClass SchoolClass   @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  classroom  CampusClassroom @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  attendanceEntries StudentAttendance[]
+
+  @@index([schoolClassId, calendarDate])
+  @@map("class_sessions")
+}
+
+model StudentAttendance {
+  id             String           @id @default(cuid())
+  classSessionId String
+  studentProfileId String
+  status         AttendanceStatus
+  note           String?
+  markedByUserId String
+  markedAt       DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  classSession  ClassSession  @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  markedBy      User          @relation("AttendanceMarkedBy", fields: [markedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([classSessionId, studentProfileId])
+  @@map("student_attendance")
+}
+
+model GradeCategory {
+  id          String   @id @default(cuid())
+  schoolClassId String
+  name        String
+  weight      Decimal? @db.Decimal(5, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schoolClass SchoolClass @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  gradeItems  GradeItem[]
+
+  @@map("grade_categories")
+}
+
+model GradeItem {
+  id          String   @id @default(cuid())
+  schoolClassId String
+  categoryId  String?
+  title       String
+  maxScore    Decimal  @db.Decimal(7, 2)
+  assignedOn  DateTime @db.Date
+  dueOn       DateTime? @db.Date
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schoolClass SchoolClass   @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  category    GradeCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  studentGrades StudentGrade[]
+
+  @@map("grade_items")
+}
+
+model StudentGrade {
+  id            String   @id @default(cuid())
+  gradeItemId   String
+  studentProfileId String
+  score         Decimal  @db.Decimal(7, 2)
+  letterGrade   String?
+  comment       String?
+  gradedByUserId String
+  gradedAt      DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  gradeItem     GradeItem     @relation(fields: [gradeItemId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  gradedBy      User          @relation("GradeMarkedBy", fields: [gradedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([gradeItemId, studentProfileId])
+  @@map("student_grades")
 }
 
 // NextAuth.js Models
