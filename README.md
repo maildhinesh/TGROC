@@ -2,7 +2,7 @@
 
 A full-featured member management portal for **TGROC** (The Tamils of Greater Rochester), built with Next.js, TypeScript, Prisma ORM, and NextAuth.js.
 
----
+--- 
 
 ## Features
 

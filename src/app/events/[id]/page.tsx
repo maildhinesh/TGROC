@@ -53,7 +53,7 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [attending, setAttending] = useState("YES");
-  const [adultCount, setAdultCount] = useState(1);
+  const [adultCount, setAdultCount] = useState("1");
   const [kidCount, setKidCount] = useState(0);
   const [vegetarianCount, setVegetarianCount] = useState(0);
   const [nonVegetarianCount, setNonVegetarianCount] = useState(0);
@@ -93,6 +93,8 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
     setIsSubmitting(true);
     setSubmitError(null);
 
+    const normalizedAdultCount = Math.max(1, Number.parseInt(adultCount, 10) || 1);
+
     const res = await fetch(`/api/events/${id}/rsvp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -101,7 +103,7 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
         email,
         phone: phone || undefined,
         attending,
-        adultCount: attending === "YES" ? adultCount : 0,
+        adultCount: attending === "YES" ? normalizedAdultCount : 0,
         kidCount: attending === "YES" ? kidCount : 0,
         vegetarianCount: attending === "YES" ? vegetarianCount : 0,
         nonVegetarianCount: attending === "YES" ? nonVegetarianCount : 0,
@@ -401,7 +403,8 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
                             min={1}
                             max={20}
                             value={adultCount}
-                            onChange={(e) => setAdultCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            onChange={(e) => setAdultCount(e.target.value)}
+                            onBlur={() => setAdultCount(String(Math.max(1, Number.parseInt(adultCount, 10) || 1)))}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
