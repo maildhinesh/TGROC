@@ -101,7 +101,7 @@ export default function MemberProfilePage() {
             lastName: user.profile.lastName,
             phone: user.profile.phone ?? "",
             dateOfBirth: user.profile.dateOfBirth
-              ? new Date(user.profile.dateOfBirth).getFullYear().toString()
+              ? new Date(user.profile.dateOfBirth).getUTCFullYear().toString()
               : "",
           });
         }
@@ -203,7 +203,7 @@ export default function MemberProfilePage() {
       relationship: m.relationship as "SPOUSE" | "CHILD",
       firstName: m.firstName,
       lastName: m.lastName,
-      dateOfBirth: m.dateOfBirth ? new Date(m.dateOfBirth).getFullYear().toString() : "",
+      dateOfBirth: m.dateOfBirth ? new Date(m.dateOfBirth).getUTCFullYear().toString() : "",
       email: m.email ?? "",
       phone: m.phone ?? "",
     });
@@ -490,7 +490,7 @@ export default function MemberProfilePage() {
                             </p>
                             <p className="text-xs text-gray-500 capitalize">
                               {m.relationship.toLowerCase()}
-                              {m.dateOfBirth ? ` · Born ${new Date(m.dateOfBirth).getFullYear()}` : ""}
+                              {m.dateOfBirth ? ` · Born ${new Date(m.dateOfBirth).getUTCFullYear()}` : ""}
                             </p>
                           </div>
                         </div>
