@@ -90,7 +90,7 @@ export default function Home() {
       </section>
 
       <footer className="text-center text-blue-300 py-8 text-sm">
-        © {new Date().getFullYear()} TGROC. All rights reserved.
+        © {new Date().getUTCFullYear()} TGROC. All rights reserved.
       </footer>
     </main>
   );

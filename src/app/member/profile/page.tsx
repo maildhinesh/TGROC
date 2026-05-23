@@ -309,7 +309,7 @@ export default function MemberProfilePage() {
                 label="Year of Birth"
                 type="number"
                 min={1900}
-                max={new Date().getFullYear()}
+                max={new Date().getUTCFullYear()}
                 placeholder="e.g. 1985"
                 {...register("dateOfBirth")}
                 hint="Optional"
@@ -441,7 +441,7 @@ export default function MemberProfilePage() {
                           label="Year of Birth"
                           type="number"
                           min={1900}
-                          max={new Date().getFullYear()}
+                          max={new Date().getUTCFullYear()}
                           placeholder="e.g. 1985"
                           {...registerEditFamily("dateOfBirth")}
                           hint="Optional"
@@ -583,7 +583,7 @@ export default function MemberProfilePage() {
                     label="Year of Birth"
                     type="number"
                     min={1900}
-                    max={new Date().getFullYear()}
+                    max={new Date().getUTCFullYear()}
                     placeholder="e.g. 1985"
                     {...registerFamily("dateOfBirth")}
                     hint="Optional"
