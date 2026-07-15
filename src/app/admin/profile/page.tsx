@@ -74,7 +74,7 @@ export default async function AdminProfilePage() {
                 <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">
                   Year of Birth
                 </p>
-                <p className="text-sm text-gray-800">{new Date(user.profile.dateOfBirth).getFullYear()}</p>
+                <p className="text-sm text-gray-800">{new Date(user.profile.dateOfBirth).getUTCFullYear()}</p>
               </div>
             )}
           </div>

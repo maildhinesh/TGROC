@@ -263,7 +263,7 @@ function buildUpcomingEmail(opts: {
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px;text-align:center;">
             <p style="color:#9ca3af;font-size:12px;margin:0;">
-              © ${new Date().getFullYear()} Tamils of Greater Rochester. All rights reserved.
+              © ${new Date().getUTCFullYear()} Tamils of Greater Rochester. All rights reserved.
             </p>
           </td>
         </tr>
@@ -342,7 +342,7 @@ function buildExpiredEmail(opts: { name: string; expiryFormatted: string }): { h
         <tr>
           <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px;text-align:center;">
             <p style="color:#9ca3af;font-size:12px;margin:0;">
-              © ${new Date().getFullYear()} Tamils of Greater Rochester. All rights reserved.
+              © ${new Date().getUTCFullYear()} Tamils of Greater Rochester. All rights reserved.
             </p>
           </td>
         </tr>
