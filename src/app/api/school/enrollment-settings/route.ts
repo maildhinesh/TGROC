@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { SCHOOL_ADMIN_ROLE, getSchoolAccessState, hasSchoolRole } from "@/lib/school-auth";
 
 const updateSettingsSchema = z.object({
   isEnrollmentEnabled: z.boolean(),
@@ -23,7 +24,16 @@ export async function GET() {
 // PUT /api/school/enrollment-settings — update enrollment settings (admin only)
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const accessState = await getSchoolAccessState(session.user.id);
+  const isGlobalAdmin = session.user.role === "ADMIN";
+  const isSchoolAdmin = accessState ? hasSchoolRole(accessState, SCHOOL_ADMIN_ROLE) : false;
+
+  if (!isGlobalAdmin && !isSchoolAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
