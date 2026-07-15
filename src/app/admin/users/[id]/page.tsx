@@ -93,7 +93,7 @@ export default async function UserDetailPage({
             <InfoRow label="Last Name" value={user.profile?.lastName} />
             <InfoRow
               label="Year of Birth"
-              value={user.profile?.dateOfBirth ? new Date(user.profile.dateOfBirth).getFullYear().toString() : undefined}
+              value={user.profile?.dateOfBirth ? new Date(user.profile.dateOfBirth).getUTCFullYear().toString() : undefined}
             />
             <InfoRow label="Phone" value={user.profile?.phone} icon={<Phone className="w-4 h-4" />} />
             <InfoRow label="Email" value={user.email} icon={<Mail className="w-4 h-4" />} />
@@ -138,7 +138,7 @@ export default async function UserDetailPage({
                     </p>
                     <p className="text-sm text-gray-500">
                       {member.relationship}{" "}
-                      {member.dateOfBirth ? `· Born ${new Date(member.dateOfBirth).getFullYear()}` : ""}
+                      {member.dateOfBirth ? `· Born ${new Date(member.dateOfBirth).getUTCFullYear()}` : ""}
                     </p>
                   </div>
                 </div>
