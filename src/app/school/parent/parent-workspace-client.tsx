@@ -311,8 +311,8 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
         <Card title="My Students" description="Students from your family profile available for enrollment.">
           {childrenMissingDob > 0 && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              {childrenMissingDob} child member{childrenMissingDob > 1 ? "s are" : " is"} missing a date of birth in your family profile and cannot be enrolled. Please update your{" "}
-              <a href="/member/profile" className="underline font-medium">family profile</a> to add their date of birth.
+              {childrenMissingDob} child member{childrenMissingDob > 1 ? "s are" : " is"} missing a year of birth in your family profile and cannot be enrolled. Please update your{" "}
+              <a href="/member/profile" className="underline font-medium">family profile</a> to add their year of birth.
             </div>
           )}
           {students.length === 0 ? (
@@ -326,7 +326,7 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
               {students.map((student) => (
                 <div key={student.id} className="rounded-lg bg-gray-50 p-3">
                   <p className="font-medium text-gray-900">{student.firstName} {student.lastName}</p>
-                  <p className="text-xs text-gray-600">DOB {formatDate(student.dateOfBirth)}</p>
+                  <p className="text-xs text-gray-600">Year of Birth {new Date(student.dateOfBirth).getUTCFullYear()}</p>
                 </div>
               ))}
             </div>
