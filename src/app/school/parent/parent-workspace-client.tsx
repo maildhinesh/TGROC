@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Badge, Card, Input, Select } from "@/components/ui";
+import { Badge, Card, Select } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 
 export type ParentStudent = {
@@ -70,9 +70,10 @@ type Props = {
   initialYears: SchoolYearOption[];
   initialEnrollments: ParentEnrollment[];
   isEnrollmentEnabled: boolean;
+  childrenMissingDob: number;
 };
 
-type EnrollmentFormState = {
+export type EnrollmentFormState = {
   schoolYearId: string;
   studentProfileId: string;
   insuranceProviderName: string;
@@ -115,21 +116,12 @@ function getBadgeVariant(status: ParentEnrollment["status"]): "default" | "warni
 }
 
 export default function ParentWorkspaceClient({ initialStudents, initialYears, initialEnrollments, isEnrollmentEnabled }: Props) {
+
   const [students, setStudents] = useState(initialStudents);
   const [years] = useState(initialYears);
   const [enrollments, setEnrollments] = useState(initialEnrollments);
   const [feedback, setFeedback] = useState<string>("");
   const [loading, setLoading] = useState<string | null>(null);
-
-  const [studentForm, setStudentForm] = useState({
-    firstName: "",
-    lastName: "",
-    dateOfBirth: "",
-    gender: "",
-    emergencyContactName: "",
-    emergencyContactPhone: "",
-    notes: "",
-  });
 
   const [enrollmentForm, setEnrollmentForm] = useState<EnrollmentFormState>(
     defaultEnrollmentForm(initialStudents, initialYears)
@@ -149,57 +141,6 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
     }
     const data = (await res.json()) as { enrollments: ParentEnrollment[] };
     setEnrollments(data.enrollments);
-  }
-
-  async function refreshStudents() {
-    const res = await fetch("/api/school/parent/students", { cache: "no-store" });
-    if (!res.ok) {
-      throw new Error("Failed to refresh students");
-    }
-    const data = (await res.json()) as { students: ParentStudent[] };
-    setStudents(data.students);
-  }
-
-  async function onCreateStudent(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLoading("create-student");
-    setFeedback("");
-    try {
-      const res = await fetch("/api/school/parent/students", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: studentForm.firstName,
-          lastName: studentForm.lastName,
-          dateOfBirth: studentForm.dateOfBirth,
-          gender: studentForm.gender || null,
-          emergencyContactName: studentForm.emergencyContactName || null,
-          emergencyContactPhone: studentForm.emergencyContactPhone || null,
-          notes: studentForm.notes || null,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to create student");
-      }
-
-      await refreshStudents();
-      setStudentForm({
-        firstName: "",
-        lastName: "",
-        dateOfBirth: "",
-        gender: "",
-        emergencyContactName: "",
-        emergencyContactPhone: "",
-        notes: "",
-      });
-      setFeedback("Student profile created.");
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Failed to create student");
-    } finally {
-      setLoading(null);
-    }
   }
 
   async function onCreateEnrollment(event: React.FormEvent<HTMLFormElement>) {
@@ -367,64 +308,29 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card title="Student Profiles" description="Create and maintain student profiles for enrollment.">
-          <form className="space-y-3" onSubmit={onCreateStudent}>
-            <Input
-              label="First name"
-              required
-              value={studentForm.firstName}
-              onChange={(event) => setStudentForm((prev) => ({ ...prev, firstName: event.target.value }))}
-            />
-            <Input
-              label="Last name"
-              required
-              value={studentForm.lastName}
-              onChange={(event) => setStudentForm((prev) => ({ ...prev, lastName: event.target.value }))}
-            />
-            <Input
-              label="Date of birth"
-              type="date"
-              required
-              value={studentForm.dateOfBirth}
-              onChange={(event) => setStudentForm((prev) => ({ ...prev, dateOfBirth: event.target.value }))}
-            />
-            <Input
-              label="Gender"
-              value={studentForm.gender}
-              onChange={(event) => setStudentForm((prev) => ({ ...prev, gender: event.target.value }))}
-            />
-            <Input
-              label="Emergency contact name"
-              value={studentForm.emergencyContactName}
-              onChange={(event) => setStudentForm((prev) => ({ ...prev, emergencyContactName: event.target.value }))}
-            />
-            <Input
-              label="Emergency contact phone"
-              value={studentForm.emergencyContactPhone}
-              onChange={(event) => setStudentForm((prev) => ({ ...prev, emergencyContactPhone: event.target.value }))}
-            />
-            <Input
-              label="Notes"
-              value={studentForm.notes}
-              onChange={(event) => setStudentForm((prev) => ({ ...prev, notes: event.target.value }))}
-            />
-            <button
-              type="submit"
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-              disabled={loading === "create-student"}
-            >
-              {loading === "create-student" ? "Saving..." : "Create Student"}
-            </button>
-          </form>
-
-          <div className="mt-5 space-y-2">
-            {students.map((student) => (
-              <div key={student.id} className="rounded-lg bg-gray-50 p-3">
-                <p className="font-medium text-gray-900">{student.firstName} {student.lastName}</p>
-                <p className="text-xs text-gray-600">DOB {formatDate(student.dateOfBirth)}</p>
-              </div>
-            ))}
-          </div>
+        <Card title="My Students" description="Students from your family profile available for enrollment.">
+          {childrenMissingDob > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              {childrenMissingDob} child member{childrenMissingDob > 1 ? "s are" : " is"} missing a date of birth in your family profile and cannot be enrolled. Please update your{" "}
+              <a href="/member/profile" className="underline font-medium">family profile</a> to add their date of birth.
+            </div>
+          )}
+          {students.length === 0 ? (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+              No children found in your family profile. Please{" "}
+              <a href="/member/profile" className="underline font-medium text-blue-600">update your family profile</a>{" "}
+              to add children before enrolling.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {students.map((student) => (
+                <div key={student.id} className="rounded-lg bg-gray-50 p-3">
+                  <p className="font-medium text-gray-900">{student.firstName} {student.lastName}</p>
+                  <p className="text-xs text-gray-600">DOB {formatDate(student.dateOfBirth)}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         {isEnrollmentEnabled ? (

@@ -3,12 +3,12 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { CalendarDays, ClipboardList, FileSpreadsheet, School2, TimerReset, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Badge, Card, PageHeader, StatCard } from "@/components/ui";
+import { Card, PageHeader, StatCard } from "@/components/ui";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
 import { getSchoolAccessState, hasAnySchoolRole, isSchoolAdmin } from "@/lib/school-auth";
 import { EnrollmentSettingsCard } from "./enrollment-settings-card";
+import { SchoolYearsCard } from "./school-years-card";
 
 export default async function SchoolAdminPage() {
   const session = await getServerSession(authOptions);
@@ -21,16 +21,8 @@ export default async function SchoolAdminPage() {
     redirect("/school");
   }
 
-  const [years, pendingEnrollments, classes, teachers] = await Promise.all([
-    prisma.schoolYear.findMany({
-      orderBy: [{ startsOn: "desc" }],
-      take: 4,
-      include: {
-        _count: {
-          select: { enrollments: true, classes: true },
-        },
-      },
-    }),
+  const [yearCount, pendingEnrollments, classes, teachers] = await Promise.all([
+    prisma.schoolYear.count(),
     prisma.schoolEnrollment.findMany({
       where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
       take: 8,
@@ -80,13 +72,14 @@ export default async function SchoolAdminPage() {
         />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="School Years" value={years.length} icon={<CalendarDays className="h-5 w-5" />} color="blue" />
+          <StatCard title="School Years" value={yearCount} icon={<CalendarDays className="h-5 w-5" />} color="blue" />
           <StatCard title="Pending Reviews" value={pendingEnrollments.length} icon={<ClipboardList className="h-5 w-5" />} color="yellow" />
           <StatCard title="Active Classes" value={classes.length} icon={<School2 className="h-5 w-5" />} color="green" />
           <StatCard title="Active Teachers" value={teachers} icon={<Users className="h-5 w-5" />} color="purple" />
         </div>
 
         <EnrollmentSettingsCard />
+        <SchoolYearsCard />
 
         <Link
           href="/school/admin/sessions"
@@ -118,8 +111,7 @@ export default async function SchoolAdminPage() {
           </div>
         </Link>
 
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <Card title="Enrollment Review Queue" description="Newest school enrollments awaiting decision.">
+        <Card title="Enrollment Review Queue" description="Newest school enrollments awaiting decision.">
             <div className="space-y-3">
               {pendingEnrollments.length === 0 ? (
                 <p className="text-sm text-gray-500">No enrollments need review right now.</p>
@@ -144,31 +136,7 @@ export default async function SchoolAdminPage() {
                 ))
               )}
             </div>
-          </Card>
-
-          <Card title="School Years" description="Current terms and enrollment volume.">
-            <div className="space-y-3">
-              {years.map((year) => (
-                <div key={year.id} className="rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-gray-900">{year.label}</p>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(year.startsOn)} to {formatDate(year.endsOn)}
-                      </p>
-                    </div>
-                    <Badge variant={year.status === "ACTIVE" ? "success" : year.status === "PLANNED" ? "info" : "default"}>
-                      {year.status}
-                    </Badge>
-                  </div>
-                  <p className="mt-3 text-sm text-gray-600">
-                    {year._count.enrollments} enrollments · {year._count.classes} classes
-                  </p>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
+        </Card>
 
         <Card title="Recent Classes" description="Latest class groups available for staffing and roster management.">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

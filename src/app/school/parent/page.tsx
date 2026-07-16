@@ -18,6 +18,42 @@ export default async function SchoolParentPage() {
     redirect("/school");
   }
 
+  // Auto-sync StudentProfile entries from CHILD family members
+  const childFamilyMembers = await prisma.familyMember.findMany({
+    where: { userId: session.user.id, relationship: "CHILD" },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+  });
+
+  const childrenWithDob = childFamilyMembers.filter((c) => c.dateOfBirth !== null);
+  const childrenMissingDob = childFamilyMembers.length - childrenWithDob.length;
+
+  if (childrenWithDob.length > 0) {
+    const existingProfiles = await prisma.studentProfile.findMany({
+      where: { parentUserId: session.user.id },
+      select: { firstName: true, lastName: true, dateOfBirth: true },
+    });
+    const existingKeys = new Set(
+      existingProfiles.map(
+        (p) => `${p.firstName}|${p.lastName}|${p.dateOfBirth.toISOString().split("T")[0]}`
+      )
+    );
+    const toCreate = childrenWithDob.filter((c) => {
+      const key = `${c.firstName}|${c.lastName}|${c.dateOfBirth!.toISOString().split("T")[0]}`;
+      return !existingKeys.has(key);
+    });
+    if (toCreate.length > 0) {
+      await prisma.studentProfile.createMany({
+        data: toCreate.map((c) => ({
+          parentUserId: session.user.id,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          dateOfBirth: c.dateOfBirth!,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
   const [students, years, enrollments, enrollmentSettings] = await Promise.all([
     prisma.studentProfile.findMany({
       where: { parentUserId: session.user.id },
@@ -98,6 +134,7 @@ export default async function SchoolParentPage() {
           initialYears={mappedYears}
           initialEnrollments={mappedEnrollments}
           isEnrollmentEnabled={enrollmentSettings?.isEnrollmentEnabled ?? false}
+          childrenMissingDob={childrenMissingDob}
         />
       </div>
     </DashboardLayout>
