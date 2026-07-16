@@ -115,7 +115,7 @@ function getBadgeVariant(status: ParentEnrollment["status"]): "default" | "warni
   return "warning";
 }
 
-export default function ParentWorkspaceClient({ initialStudents, initialYears, initialEnrollments, isEnrollmentEnabled }: Props) {
+export default function ParentWorkspaceClient({ initialStudents, initialYears, initialEnrollments, isEnrollmentEnabled, childrenMissingDob }: Props) {
 
   const [students, setStudents] = useState(initialStudents);
   const [years] = useState(initialYears);
