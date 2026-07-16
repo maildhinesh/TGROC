@@ -69,7 +69,7 @@ export function hasPaidMemberEligibility(state: SchoolAccessState) {
 }
 
 export function isEligibleSchoolParent(state: SchoolAccessState) {
-  return hasSchoolRole(state, SCHOOL_PARENT_ROLE) && hasPaidMemberEligibility(state);
+  return hasSchoolRole(state, SCHOOL_PARENT_ROLE);
 }
 
 export function isSchoolAdmin(state: SchoolAccessState) {

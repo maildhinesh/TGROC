@@ -9,8 +9,40 @@ const updateSettingsSchema = z.object({
   isEnrollmentEnabled: z.boolean(),
 });
 
+async function ensureSchoolEnrollmentSettingsTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "school_enrollment_settings" (
+      "id" TEXT NOT NULL,
+      "isEnrollmentEnabled" BOOLEAN NOT NULL DEFAULT false,
+      "updatedById" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "school_enrollment_settings_pkey" PRIMARY KEY ("id")
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'school_enrollment_settings_updatedById_fkey'
+      ) THEN
+        ALTER TABLE "school_enrollment_settings"
+        ADD CONSTRAINT "school_enrollment_settings_updatedById_fkey"
+        FOREIGN KEY ("updatedById") REFERENCES "users"("id")
+        ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+    END
+    $$;
+  `);
+}
+
 // GET /api/school/enrollment-settings — fetch enrollment settings
 export async function GET() {
+  await ensureSchoolEnrollmentSettingsTable();
+
   const settings = await prisma.schoolEnrollmentSettings.findFirst({
     select: { isEnrollmentEnabled: true, updatedAt: true },
   });
@@ -36,6 +68,8 @@ export async function PUT(req: Request) {
   if (!isGlobalAdmin && !isSchoolAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  await ensureSchoolEnrollmentSettingsTable();
 
   const body = await req.json();
   const parsed = updateSettingsSchema.safeParse(body);

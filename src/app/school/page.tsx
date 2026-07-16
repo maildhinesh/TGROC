@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { BookOpen, ClipboardList, FileSpreadsheet, School2, TimerReset, Users } from "lucide-react";
+import { BookOpen, ClipboardList, FileSpreadsheet, TimerReset, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -93,13 +93,6 @@ export default async function SchoolDashboardPage() {
           bg: "bg-violet-50",
         }
       : null,
-    {
-      href: "/school",
-      title: "School Hub",
-      description: "Shared landing area for all Tamil School roles.",
-      icon: <School2 className="h-7 w-7 text-indigo-600" />,
-      bg: "bg-indigo-50",
-    },
   ].filter(Boolean);
 
   return (
