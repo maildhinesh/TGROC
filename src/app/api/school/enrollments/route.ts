@@ -184,6 +184,7 @@ export async function POST(req: Request) {
           mediaWaiverAccepted: parsed.data.waivers.mediaWaiverAccepted,
           mediaWaiverVersion: parsed.data.waivers.mediaWaiverVersion,
           mediaWaiverAcceptedAt: new Date(),
+          acceptedByUserId: session.user.id,
         },
       },
     },

@@ -5,6 +5,20 @@ import GoogleProvider from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import type { SchoolRole } from "@/types/next-auth";
+
+async function getActiveSchoolRoles(userId: string) {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ role: string }>>`
+      SELECT "role"
+      FROM "school_user_roles"
+      WHERE "userId" = ${userId} AND "isActive" = true
+    `;
+    return rows.map((row) => row.role as SchoolRole);
+  } catch {
+    return [] as SchoolRole[];
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -34,7 +48,7 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
-          include: { profile: true, schoolRoleAssignments: true },
+          include: { profile: true },
         });
 
         if (!user || !user.password) {
@@ -58,15 +72,15 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password");
         }
 
+        const schoolRoles = await getActiveSchoolRoles(user.id);
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           image: user.image,
           role: user.role,
-          schoolRoles: user.schoolRoleAssignments
-            .filter((assignment) => assignment.isActive)
-            .map((assignment) => assignment.role),
+          schoolRoles,
           status: user.status,
           membershipType: user.membershipType,
         };
@@ -150,16 +164,12 @@ export const authOptions: NextAuthOptions = {
             status: true,
             membershipType: true,
             name: true,
-            schoolRoleAssignments: {
-              select: { role: true, isActive: true },
-            },
           },
         });
         if (dbUser) {
+          const schoolRoles = await getActiveSchoolRoles(token.id as string);
           token.role = dbUser.role;
-          token.schoolRoles = dbUser.schoolRoleAssignments
-            .filter((assignment) => assignment.isActive)
-            .map((assignment) => assignment.role) as any[];
+          token.schoolRoles = schoolRoles as any[];
           token.status = dbUser.status;
           token.membershipType = dbUser.membershipType;
         }

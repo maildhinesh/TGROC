@@ -20,6 +20,19 @@ export async function getSchoolSession() {
   return getServerSession(authOptions);
 }
 
+async function getActiveSchoolRoles(userId: string): Promise<SchoolRole[]> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ role: string }>>`
+      SELECT "role"
+      FROM "school_user_roles"
+      WHERE "userId" = ${userId} AND "isActive" = true
+    `;
+    return rows.map((row) => row.role as SchoolRole);
+  } catch {
+    return [];
+  }
+}
+
 export async function getSchoolAccessState(userId: string): Promise<SchoolAccessState | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -28,10 +41,6 @@ export async function getSchoolAccessState(userId: string): Promise<SchoolAccess
       status: true,
       membershipType: true,
       membershipExpiry: true,
-      schoolRoleAssignments: {
-        where: { isActive: true },
-        select: { role: true },
-      },
     },
   });
 
@@ -39,12 +48,14 @@ export async function getSchoolAccessState(userId: string): Promise<SchoolAccess
     return null;
   }
 
+  const schoolRoles = await getActiveSchoolRoles(user.id);
+
   return {
     id: user.id,
     status: user.status,
     membershipType: user.membershipType,
     membershipExpiry: user.membershipExpiry,
-    schoolRoles: user.schoolRoleAssignments.map((assignment) => assignment.role),
+    schoolRoles,
   };
 }
 

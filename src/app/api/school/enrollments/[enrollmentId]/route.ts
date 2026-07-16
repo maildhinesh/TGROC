@@ -162,6 +162,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ enroll
               mediaWaiverAccepted: parsed.data.waivers.mediaWaiverAccepted,
               mediaWaiverVersion: parsed.data.waivers.mediaWaiverVersion,
               mediaWaiverAcceptedAt: new Date(),
+              acceptedByUserId: session.user.id,
             },
           }
         : undefined,

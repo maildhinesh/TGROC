@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { forbidden, getSchoolAccessState, getSchoolSession, isSchoolAdmin, unauthorized } from "@/lib/school-auth";
 import { classTeacherAssignmentSchema } from "@/lib/validations";
@@ -34,20 +35,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ classId:
     return NextResponse.json({ error: "Class not found" }, { status: 404 });
   }
 
-  const teachers = await prisma.user.findMany({
-    where: {
-      id: { in: parsed.data.teacherUserIds },
-      schoolRoleAssignments: {
-        some: {
-          role: "SCHOOL_TEACHER",
-          isActive: true,
-        },
-      },
-    },
-    select: { id: true },
-  });
+  const uniqueTeacherIds = [...new Set(parsed.data.teacherUserIds)];
+  const teachers = await prisma.$queryRaw<Array<{ userId: string }>>`
+    SELECT DISTINCT "userId"
+    FROM "school_user_roles"
+    WHERE "isActive" = true
+      AND "role" = 'SCHOOL_TEACHER'
+      AND "userId" IN (${Prisma.join(uniqueTeacherIds)})
+  `;
 
-  if (teachers.length !== new Set(parsed.data.teacherUserIds).size) {
+  if (teachers.length !== uniqueTeacherIds.length) {
     return NextResponse.json({ error: "One or more teachers are invalid or inactive" }, { status: 400 });
   }
 
@@ -60,7 +57,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ classId:
       data: { assignedTo: new Date() },
     }),
     prisma.classTeacherAssignment.createMany({
-      data: [...new Set(parsed.data.teacherUserIds)].map((teacherUserId) => ({
+      data: uniqueTeacherIds.map((teacherUserId) => ({
         schoolClassId: classId,
         teacherUserId,
       })),

@@ -51,7 +51,18 @@ export async function PUT(req: Request, { params }: { params: Promise<{ classId:
     return NextResponse.json({ error: "One or more students are invalid or not approved for this school year" }, { status: 400 });
   }
 
+  const uniqueStudentIds = [...new Set(parsed.data.studentProfileIds)];
+
   await prisma.$transaction([
+    // Ensure one active class per student within a school year.
+    prisma.classStudentAssignment.updateMany({
+      where: {
+        schoolYearId: schoolClass.schoolYearId,
+        studentProfileId: { in: uniqueStudentIds },
+        removedOn: null,
+      },
+      data: { removedOn: new Date() },
+    }),
     prisma.classStudentAssignment.updateMany({
       where: {
         schoolClassId: classId,
@@ -60,7 +71,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ classId:
       data: { removedOn: new Date() },
     }),
     prisma.classStudentAssignment.createMany({
-      data: [...new Set(parsed.data.studentProfileIds)].map((studentProfileId) => ({
+      data: uniqueStudentIds.map((studentProfileId) => ({
         schoolClassId: classId,
         studentProfileId,
         schoolYearId: schoolClass.schoolYearId,

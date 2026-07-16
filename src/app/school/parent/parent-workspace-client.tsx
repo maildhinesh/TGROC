@@ -84,8 +84,8 @@ export type EnrollmentFormState = {
   pediatricianPhone: string;
   pediatricianAddress: string;
   medicalNotes: string;
-  medicalWaiverVersion: string;
-  mediaWaiverVersion: string;
+  medicalWaiverAccepted: boolean;
+  mediaWaiverAccepted: boolean;
 };
 
 function defaultEnrollmentForm(students: ParentStudent[], years: SchoolYearOption[]): EnrollmentFormState {
@@ -101,8 +101,8 @@ function defaultEnrollmentForm(students: ParentStudent[], years: SchoolYearOptio
     pediatricianPhone: "",
     pediatricianAddress: "",
     medicalNotes: "",
-    medicalWaiverVersion: "1",
-    mediaWaiverVersion: "1",
+    medicalWaiverAccepted: false,
+    mediaWaiverAccepted: false,
   };
 }
 
@@ -165,10 +165,10 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
             medicalNotes: enrollmentForm.medicalNotes || null,
           },
           waivers: {
-            medicalWaiverAccepted: true,
-            medicalWaiverVersion: Number(enrollmentForm.medicalWaiverVersion),
-            mediaWaiverAccepted: true,
-            mediaWaiverVersion: Number(enrollmentForm.mediaWaiverVersion),
+            medicalWaiverAccepted: enrollmentForm.medicalWaiverAccepted,
+            medicalWaiverVersion: 1,
+            mediaWaiverAccepted: enrollmentForm.mediaWaiverAccepted,
+            mediaWaiverVersion: 1,
           },
         }),
       });
@@ -248,10 +248,10 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
             medicalNotes: enrollmentForm.medicalNotes || null,
           },
           waivers: {
-            medicalWaiverAccepted: true,
-            medicalWaiverVersion: Number(enrollmentForm.medicalWaiverVersion),
-            mediaWaiverAccepted: true,
-            mediaWaiverVersion: Number(enrollmentForm.mediaWaiverVersion),
+            medicalWaiverAccepted: enrollmentForm.medicalWaiverAccepted,
+            medicalWaiverVersion: 1,
+            mediaWaiverAccepted: enrollmentForm.mediaWaiverAccepted,
+            mediaWaiverVersion: 1,
           },
         }),
       });
@@ -285,8 +285,8 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
       pediatricianPhone: enrollment.medicalInfo?.pediatricianPhone ?? "",
       pediatricianAddress: enrollment.medicalInfo?.pediatricianAddress ?? "",
       medicalNotes: enrollment.medicalInfo?.medicalNotes ?? "",
-      medicalWaiverVersion: String(enrollment.waivers?.medicalWaiverVersion ?? 1),
-      mediaWaiverVersion: String(enrollment.waivers?.mediaWaiverVersion ?? 1),
+      medicalWaiverAccepted: enrollment.waivers?.medicalWaiverAccepted ?? false,
+      mediaWaiverAccepted: enrollment.waivers?.mediaWaiverAccepted ?? false,
     });
   }
 
@@ -338,59 +338,84 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
             <Select
               label="School year"
               required
-              value={enrollmentForm.schoolYearId}
+              value={enrollmentForm.schoolYearId ?? ""}
               onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, schoolYearId: event.target.value }))}
               options={yearOptions}
             />
             <Select
               label="Student"
               required
-              value={enrollmentForm.studentProfileId}
+              value={enrollmentForm.studentProfileId ?? ""}
               onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, studentProfileId: event.target.value }))}
               options={studentOptions}
             />
             <Input
               label="Insurance provider"
               required
-              value={enrollmentForm.insuranceProviderName}
+              value={enrollmentForm.insuranceProviderName ?? ""}
               onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, insuranceProviderName: event.target.value }))}
             />
             <Input
               label="Insurance policy number"
               required
-              value={enrollmentForm.insurancePolicyNumber}
+              value={enrollmentForm.insurancePolicyNumber ?? ""}
               onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, insurancePolicyNumber: event.target.value }))}
             />
             <Input
               label="Pediatrician name"
               required
-              value={enrollmentForm.pediatricianName}
+              value={enrollmentForm.pediatricianName ?? ""}
               onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, pediatricianName: event.target.value }))}
             />
             <Input
               label="Pediatrician phone"
               required
-              value={enrollmentForm.pediatricianPhone}
+              value={enrollmentForm.pediatricianPhone ?? ""}
               onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, pediatricianPhone: event.target.value }))}
             />
-            <Input
-              label="Medical waiver version"
-              type="number"
-              required
-              value={enrollmentForm.medicalWaiverVersion}
-              onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, medicalWaiverVersion: event.target.value }))}
-            />
-            <Input
-              label="Media waiver version"
-              type="number"
-              required
-              value={enrollmentForm.mediaWaiverVersion}
-              onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, mediaWaiverVersion: event.target.value }))}
-            />
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-900">Medical Waiver (v1)</h3>
+              <p className="mt-2 text-xs text-gray-700">
+                I authorize Tamil School staff and volunteers to obtain emergency medical treatment for my child when I cannot be reached.
+                I understand reasonable efforts will be made to contact me first, and I accept responsibility for related medical costs.
+              </p>
+              <label className="mt-3 flex items-start gap-2 text-sm text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={Boolean(enrollmentForm.medicalWaiverAccepted)}
+                  onChange={(event) =>
+                    setEnrollmentForm((prev) => ({ ...prev, medicalWaiverAccepted: event.target.checked }))
+                  }
+                />
+                <span>I have read and accept the Medical Waiver.</span>
+              </label>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-900">Media Waiver (v1)</h3>
+              <p className="mt-2 text-xs text-gray-700">
+                I grant permission for my child to appear in photos, videos, and related school promotional materials.
+                I understand materials may be used on the organization website, social media, and printed communications.
+              </p>
+              <label className="mt-3 flex items-start gap-2 text-sm text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={Boolean(enrollmentForm.mediaWaiverAccepted)}
+                  onChange={(event) =>
+                    setEnrollmentForm((prev) => ({ ...prev, mediaWaiverAccepted: event.target.checked }))
+                  }
+                />
+                <span>I have read and accept the Media Waiver.</span>
+              </label>
+            </div>
             <button
               type="submit"
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              disabled={loading === "create-enrollment" || loading === `update-${editingEnrollment?.id ?? ""}`}
+              disabled={
+                loading === "create-enrollment" ||
+                loading === `update-${editingEnrollment?.id ?? ""}` ||
+                !enrollmentForm.medicalWaiverAccepted ||
+                !enrollmentForm.mediaWaiverAccepted
+              }
             >
               {editingEnrollment
                 ? loading === `update-${editingEnrollment.id}`

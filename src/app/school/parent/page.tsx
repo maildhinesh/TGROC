@@ -18,16 +18,25 @@ export default async function SchoolParentPage() {
     redirect("/school");
   }
 
+  const prismaAny = prisma as unknown as Record<string, { findMany?: (...args: unknown[]) => Promise<unknown> } & Record<string, unknown>>;
+  const hasFamilyMemberDelegate = typeof prismaAny.familyMember?.findMany === "function";
+  const hasStudentProfileDelegate = typeof prismaAny.studentProfile?.findMany === "function";
+  const hasSchoolYearDelegate = typeof prismaAny.schoolYear?.findMany === "function";
+  const hasSchoolEnrollmentDelegate = typeof prismaAny.schoolEnrollment?.findMany === "function";
+  const hasEnrollmentSettingsDelegate = typeof prismaAny.schoolEnrollmentSettings?.findFirst === "function";
+
   // Auto-sync StudentProfile entries from CHILD family members
-  const childFamilyMembers = await prisma.familyMember.findMany({
-    where: { userId: session.user.id, relationship: "CHILD" },
-    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-  });
+  const childFamilyMembers = hasFamilyMemberDelegate
+    ? await prisma.familyMember.findMany({
+        where: { userId: session.user.id, relationship: "CHILD" },
+        orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+      })
+    : [];
 
   const childrenWithDob = childFamilyMembers.filter((c) => c.dateOfBirth !== null);
   const childrenMissingDob = childFamilyMembers.length - childrenWithDob.length;
 
-  if (childrenWithDob.length > 0) {
+  if (childrenWithDob.length > 0 && hasStudentProfileDelegate) {
     const existingProfiles = await prisma.studentProfile.findMany({
       where: { parentUserId: session.user.id },
       select: { firstName: true, lastName: true, dateOfBirth: true },
@@ -55,32 +64,40 @@ export default async function SchoolParentPage() {
   }
 
   const [students, years, enrollments, enrollmentSettings] = await Promise.all([
-    prisma.studentProfile.findMany({
-      where: { parentUserId: session.user.id },
-      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-    }),
-    prisma.schoolYear.findMany({
-      where: { status: { in: ["PLANNED", "ACTIVE"] } },
-      orderBy: [{ startsOn: "desc" }],
-      select: {
-        id: true,
-        label: true,
-        status: true,
-      },
-    }),
-    prisma.schoolEnrollment.findMany({
-      where: { parentUserId: session.user.id },
-      include: {
-        schoolYear: { select: { id: true, label: true, status: true } },
-        studentProfile: { select: { id: true, firstName: true, lastName: true } },
-        medicalInfo: true,
-        waivers: true,
-      },
-      orderBy: [{ updatedAt: "desc" }],
-    }),
-    prisma.schoolEnrollmentSettings.findFirst({
-      select: { isEnrollmentEnabled: true },
-    }),
+    hasStudentProfileDelegate
+      ? prisma.studentProfile.findMany({
+          where: { parentUserId: session.user.id },
+          orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+        })
+      : Promise.resolve([]),
+    hasSchoolYearDelegate
+      ? prisma.schoolYear.findMany({
+          where: { status: { in: ["PLANNED", "ACTIVE"] } },
+          orderBy: [{ startsOn: "desc" }],
+          select: {
+            id: true,
+            label: true,
+            status: true,
+          },
+        })
+      : Promise.resolve([]),
+    hasSchoolEnrollmentDelegate
+      ? prisma.schoolEnrollment.findMany({
+          where: { parentUserId: session.user.id },
+          include: {
+            schoolYear: { select: { id: true, label: true, status: true } },
+            studentProfile: { select: { id: true, firstName: true, lastName: true } },
+            medicalInfo: true,
+            waivers: true,
+          },
+          orderBy: [{ updatedAt: "desc" }],
+        })
+      : Promise.resolve([]),
+    hasEnrollmentSettingsDelegate
+      ? prisma.schoolEnrollmentSettings.findFirst({
+          select: { isEnrollmentEnabled: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const mappedStudents: ParentStudent[] = students.map((student) => ({

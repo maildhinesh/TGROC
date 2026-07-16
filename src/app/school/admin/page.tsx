@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { getSchoolAccessState, hasAnySchoolRole, isSchoolAdmin } from "@/lib/school-auth";
 import { EnrollmentSettingsCard } from "./enrollment-settings-card";
 import { SchoolYearsCard } from "./school-years-card";
+import { AdminManagementPanel } from "./admin-management-panel";
 
 export default async function SchoolAdminPage() {
   const session = await getServerSession(authOptions);
@@ -21,7 +22,7 @@ export default async function SchoolAdminPage() {
     redirect("/school");
   }
 
-  const [yearCount, pendingEnrollments, classes, teachers] = await Promise.all([
+  const [yearCount, pendingEnrollments, classes, yearsForClassrooms, teachersResult] = await Promise.all([
     prisma.schoolYear.count(),
     prisma.schoolEnrollment.findMany({
       where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
@@ -34,26 +35,46 @@ export default async function SchoolAdminPage() {
       },
     }),
     prisma.schoolClass.findMany({
-      take: 6,
       orderBy: [{ updatedAt: "desc" }],
       include: {
-        schoolYear: { select: { label: true } },
+        schoolYear: { select: { id: true, label: true } },
+        teacherAssignments: {
+          where: { assignedTo: null },
+          include: {
+            teacher: { select: { id: true, name: true, email: true } },
+          },
+        },
+        studentAssignments: {
+          where: { removedOn: null },
+          include: {
+            studentProfile: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
         _count: {
           select: { teacherAssignments: true, studentAssignments: true },
         },
       },
     }),
-    prisma.user.count({
-      where: {
-        schoolRoleAssignments: {
-          some: {
-            role: "SCHOOL_TEACHER",
-            isActive: true,
-          },
-        },
-      },
+    prisma.schoolYear.findMany({
+      orderBy: [{ startsOn: "desc" }],
+      select: { id: true, label: true, status: true },
     }),
+    prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(DISTINCT "userId")::bigint AS count
+      FROM "school_user_roles"
+      WHERE "role" = 'SCHOOL_TEACHER' AND "isActive" = true
+    `,
   ]);
+
+  const teacherDirectory = await prisma.$queryRaw<Array<{ id: string; name: string | null; email: string }>>`
+    SELECT u."id", u."name", u."email"
+    FROM "users" u
+    INNER JOIN "school_user_roles" sur ON sur."userId" = u."id"
+    WHERE sur."role" = 'SCHOOL_TEACHER' AND sur."isActive" = true
+    ORDER BY COALESCE(u."name", u."email") ASC
+  `;
+
+  const teachers = Number(teachersResult[0]?.count ?? 0);
 
   return (
     <DashboardLayout>
@@ -80,6 +101,41 @@ export default async function SchoolAdminPage() {
 
         <EnrollmentSettingsCard />
         <SchoolYearsCard />
+        <AdminManagementPanel
+          initialPendingEnrollments={pendingEnrollments.map((enrollment) => ({
+            id: enrollment.id,
+            status: enrollment.status,
+            updatedAt: enrollment.updatedAt.toISOString(),
+            schoolYear: { label: enrollment.schoolYear.label },
+            studentProfile: {
+              firstName: enrollment.studentProfile.firstName,
+              lastName: enrollment.studentProfile.lastName,
+            },
+            parent: {
+              name: enrollment.parent.name,
+              email: enrollment.parent.email,
+            },
+          }))}
+          yearOptions={yearsForClassrooms}
+          initialTeachers={teacherDirectory}
+          initialClasses={classes.map((cls) => ({
+            id: cls.id,
+            classCode: cls.classCode,
+            className: cls.className,
+            levelOrGrade: cls.levelOrGrade,
+            schoolYearId: cls.schoolYear.id,
+            schoolYearLabel: cls.schoolYear.label,
+            teacherAssignments: cls.teacherAssignments.map((ta) => ({
+              teacherUserId: ta.teacherUserId,
+              teacherName: ta.teacher.name,
+              teacherEmail: ta.teacher.email,
+            })),
+            studentAssignments: cls.studentAssignments.map((sa) => ({
+              studentProfileId: sa.studentProfileId,
+              studentName: `${sa.studentProfile.firstName} ${sa.studentProfile.lastName}`,
+            })),
+          }))}
+        />
 
         <Link
           href="/school/admin/sessions"
@@ -110,33 +166,6 @@ export default async function SchoolAdminPage() {
             </div>
           </div>
         </Link>
-
-        <Card title="Enrollment Review Queue" description="Newest school enrollments awaiting decision.">
-            <div className="space-y-3">
-              {pendingEnrollments.length === 0 ? (
-                <p className="text-sm text-gray-500">No enrollments need review right now.</p>
-              ) : (
-                pendingEnrollments.map((enrollment) => (
-                  <div key={enrollment.id} className="rounded-lg border border-gray-200 p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {enrollment.studentProfile.firstName} {enrollment.studentProfile.lastName}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {enrollment.schoolYear.label} · {enrollment.parent.name ?? enrollment.parent.email}
-                        </p>
-                      </div>
-                      <Badge variant={enrollment.status === "UNDER_REVIEW" ? "info" : "warning"}>
-                        {enrollment.status.replaceAll("_", " ")}
-                      </Badge>
-                    </div>
-                    <p className="mt-3 text-xs text-gray-400">Updated {formatDate(enrollment.updatedAt)}</p>
-                  </div>
-                ))
-              )}
-            </div>
-        </Card>
 
         <Card title="Recent Classes" description="Latest class groups available for staffing and roster management.">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
