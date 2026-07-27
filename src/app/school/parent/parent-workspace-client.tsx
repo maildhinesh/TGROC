@@ -6,15 +6,30 @@ import { Badge, Card, Input, Select } from "@/components/ui";
 export type ParentStudent = {
   id: string;
   parentUserId: string;
+  familyMemberId: string | null;
   firstName: string;
   lastName: string;
   dateOfBirth: string;
   gender: string | null;
+  email: string | null;
+  phone: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ParentContact = {
+  parent1: {
+    email: string;
+    phone: string;
+  };
+  parent2: {
+    familyMemberId: string | null;
+    email: string;
+    phone: string;
+  };
 };
 
 export type SchoolYearOption = {
@@ -65,9 +80,11 @@ export type ParentEnrollment = {
 };
 
 type Props = {
+  currentUserId: string;
   initialStudents: ParentStudent[];
   initialYears: SchoolYearOption[];
   initialEnrollments: ParentEnrollment[];
+  initialParentContact: ParentContact;
   isEnrollmentEnabled: boolean;
   childrenMissingDob: number;
 };
@@ -88,6 +105,13 @@ export type EnrollmentFormState = {
   mediaWaiverAccepted: boolean;
 };
 
+type ContactFormState = {
+  parent1Email: string;
+  parent1Phone: string;
+  parent2Email: string;
+  parent2Phone: string;
+};
+
 function defaultEnrollmentForm(students: ParentStudent[], years: SchoolYearOption[]): EnrollmentFormState {
   return {
     schoolYearId: years[0]?.id ?? "",
@@ -106,6 +130,19 @@ function defaultEnrollmentForm(students: ParentStudent[], years: SchoolYearOptio
   };
 }
 
+function getSelectedStudent(students: ParentStudent[], studentProfileId: string) {
+  return students.find((student) => student.id === studentProfileId) ?? null;
+}
+
+function defaultContactForm(parentContact: ParentContact, selectedStudent: ParentStudent | null): ContactFormState {
+  return {
+    parent1Email: parentContact.parent1.email,
+    parent1Phone: parentContact.parent1.phone,
+    parent2Email: parentContact.parent2.email,
+    parent2Phone: parentContact.parent2.phone,
+  };
+}
+
 function getBadgeVariant(status: ParentEnrollment["status"]): "default" | "warning" | "danger" | "success" | "info" {
   if (status === "APPROVED") return "success";
   if (status === "REJECTED") return "danger";
@@ -114,13 +151,17 @@ function getBadgeVariant(status: ParentEnrollment["status"]): "default" | "warni
   return "warning";
 }
 
-export default function ParentWorkspaceClient({ initialStudents, initialYears, initialEnrollments, isEnrollmentEnabled, childrenMissingDob }: Props) {
+export default function ParentWorkspaceClient({ currentUserId, initialStudents, initialYears, initialEnrollments, initialParentContact, isEnrollmentEnabled, childrenMissingDob }: Props) {
 
   const [students, setStudents] = useState(initialStudents);
   const [years] = useState(initialYears);
   const [enrollments, setEnrollments] = useState(initialEnrollments);
   const [feedback, setFeedback] = useState<string>("");
   const [loading, setLoading] = useState<string | null>(null);
+  const [parentContact, setParentContact] = useState(initialParentContact);
+  const [contactForm, setContactForm] = useState<ContactFormState>(
+    defaultContactForm(initialParentContact, getSelectedStudent(initialStudents, initialStudents[0]?.id ?? ""))
+  );
 
   const [enrollmentForm, setEnrollmentForm] = useState<EnrollmentFormState>(
     defaultEnrollmentForm(initialStudents, initialYears)
@@ -132,6 +173,67 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
     () => enrollments.find((enrollment) => enrollment.id === editingEnrollmentId) ?? null,
     [editingEnrollmentId, enrollments]
   );
+
+  const selectedStudent = useMemo(
+    () => getSelectedStudent(students, enrollmentForm.studentProfileId),
+    [enrollmentForm.studentProfileId, students]
+  );
+
+  async function saveContactDetails() {
+    if (!contactForm.parent1Email.trim()) {
+      throw new Error("Parent 1 email is required.");
+    }
+
+    const parentResponse = await fetch(`/api/users/${currentUserId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: contactForm.parent1Email.trim(),
+        profile: {
+          phone: contactForm.parent1Phone.trim() || null,
+        },
+      }),
+    });
+    const parentData = await parentResponse.json().catch(() => ({}));
+    if (!parentResponse.ok) {
+      throw new Error(parentData.error ?? "Failed to update parent 1 contact details");
+    }
+    setParentContact({
+      parent1: {
+        email: contactForm.parent1Email.trim(),
+        phone: contactForm.parent1Phone.trim(),
+      },
+      parent2: {
+        familyMemberId: parentContact.parent2.familyMemberId,
+        email: contactForm.parent2Email.trim(),
+        phone: contactForm.parent2Phone.trim(),
+      },
+    });
+
+    if (parentContact.parent2.familyMemberId) {
+      const parent2Response = await fetch(`/api/users/${currentUserId}/family/${parentContact.parent2.familyMemberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: contactForm.parent2Email.trim() || null,
+          phone: contactForm.parent2Phone.trim() || null,
+        }),
+      });
+      const parent2Data = await parent2Response.json().catch(() => ({}));
+      if (!parent2Response.ok) {
+        throw new Error(parent2Data.error ?? "Failed to update parent 2 contact details");
+      }
+
+      setParentContact((prev) => ({
+        ...prev,
+        parent2: {
+          familyMemberId: prev.parent2.familyMemberId,
+          email: (parent2Data.member?.email ?? contactForm.parent2Email.trim()) || "",
+          phone: (parent2Data.member?.phone ?? contactForm.parent2Phone.trim()) || "",
+        },
+      }));
+    }
+  }
 
   async function refreshEnrollments() {
     const res = await fetch("/api/school/enrollments", { cache: "no-store" });
@@ -147,6 +249,7 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
     setLoading("create-enrollment");
     setFeedback("");
     try {
+      await saveContactDetails();
       const res = await fetch("/api/school/enrollments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -232,6 +335,7 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
     setLoading(`update-${editingEnrollment.id}`);
     setFeedback("");
     try {
+      await saveContactDetails();
       const res = await fetch(`/api/school/enrollments/${editingEnrollment.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -272,6 +376,7 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
   }
 
   function beginEdit(enrollment: ParentEnrollment) {
+    const nextStudent = getSelectedStudent(students, enrollment.studentProfileId);
     setEditingEnrollmentId(enrollment.id);
     setEnrollmentForm({
       schoolYearId: enrollment.schoolYearId,
@@ -288,6 +393,7 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
       medicalWaiverAccepted: enrollment.waivers?.medicalWaiverAccepted ?? false,
       mediaWaiverAccepted: enrollment.waivers?.mediaWaiverAccepted ?? false,
     });
+    setContactForm(defaultContactForm(parentContact, nextStudent));
   }
 
   const studentOptions = students.map((student) => ({
@@ -299,6 +405,10 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
     value: year.id,
     label: `${year.label} (${year.status})`,
   }));
+
+  function handleStudentChange(studentProfileId: string) {
+    setEnrollmentForm((prev) => ({ ...prev, studentProfileId }));
+  }
 
   return (
     <div className="space-y-6">
@@ -326,6 +436,8 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
                 <div key={student.id} className="rounded-lg bg-gray-50 p-3">
                   <p className="font-medium text-gray-900">{student.firstName} {student.lastName}</p>
                   <p className="text-xs text-gray-600">Year of Birth {new Date(student.dateOfBirth).getUTCFullYear()}</p>
+                  <p className="text-xs text-gray-600">Email: {student.email ?? "Not set"}</p>
+                  <p className="text-xs text-gray-600">Phone: {student.phone ?? "Not set"}</p>
                 </div>
               ))}
             </div>
@@ -346,9 +458,43 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
               label="Student"
               required
               value={enrollmentForm.studentProfileId ?? ""}
-              onChange={(event) => setEnrollmentForm((prev) => ({ ...prev, studentProfileId: event.target.value }))}
+              onChange={(event) => handleStudentChange(event.target.value)}
               options={studentOptions}
             />
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-900">Parent contact details</h3>
+              <p className="mt-1 text-xs text-gray-600">
+                These values come from parent 1 and parent 2 profiles. Update them here before saving the enrollment draft.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Parent 1 email"
+                  type="email"
+                  required
+                  value={contactForm.parent1Email}
+                  onChange={(event) => setContactForm((prev) => ({ ...prev, parent1Email: event.target.value }))}
+                />
+                <Input
+                  label="Parent 1 phone"
+                  type="tel"
+                  value={contactForm.parent1Phone}
+                  onChange={(event) => setContactForm((prev) => ({ ...prev, parent1Phone: event.target.value }))}
+                />
+                <Input
+                  label="Parent 2 email"
+                  type="email"
+                  value={contactForm.parent2Email}
+                  onChange={(event) => setContactForm((prev) => ({ ...prev, parent2Email: event.target.value }))}
+                  hint={parentContact.parent2.familyMemberId ? undefined : "No spouse/family profile is linked yet."}
+                />
+                <Input
+                  label="Parent 2 phone"
+                  type="tel"
+                  value={contactForm.parent2Phone}
+                  onChange={(event) => setContactForm((prev) => ({ ...prev, parent2Phone: event.target.value }))}
+                />
+              </div>
+            </div>
             <Input
               label="Insurance provider"
               required
@@ -432,6 +578,7 @@ export default function ParentWorkspaceClient({ initialStudents, initialYears, i
                 onClick={() => {
                   setEditingEnrollmentId(null);
                   setEnrollmentForm(defaultEnrollmentForm(students, years));
+                  setContactForm(defaultContactForm(parentContact, getSelectedStudent(students, students[0]?.id ?? "")));
                 }}
               >
                 Cancel Edit

@@ -25,13 +25,38 @@ export default async function SchoolParentPage() {
   const hasSchoolEnrollmentDelegate = typeof prismaAny.schoolEnrollment?.findMany === "function";
   const hasEnrollmentSettingsDelegate = typeof prismaAny.schoolEnrollmentSettings?.findFirst === "function";
 
+  const studentKey = (firstName: string, lastName: string, dateOfBirth: Date | string) => {
+    const dateKey = typeof dateOfBirth === "string" ? dateOfBirth.split("T")[0] : dateOfBirth.toISOString().split("T")[0];
+    return `${firstName.trim().toLowerCase()}|${lastName.trim().toLowerCase()}|${dateKey}`;
+  };
+
   // Auto-sync StudentProfile entries from CHILD family members
   const childFamilyMembers = hasFamilyMemberDelegate
     ? await prisma.familyMember.findMany({
         where: { userId: session.user.id, relationship: "CHILD" },
         orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          dateOfBirth: true,
+          email: true,
+          phone: true,
+        },
       })
     : [];
+
+  const spouseFamilyMember = hasFamilyMemberDelegate
+    ? await prisma.familyMember.findFirst({
+        where: { userId: session.user.id, relationship: "SPOUSE" },
+        orderBy: [{ updatedAt: "desc" }],
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+        },
+      })
+    : null;
 
   const childrenWithDob = childFamilyMembers.filter((c) => c.dateOfBirth !== null);
   const childrenMissingDob = childFamilyMembers.length - childrenWithDob.length;
@@ -63,7 +88,18 @@ export default async function SchoolParentPage() {
     }
   }
 
-  const [students, years, enrollments, enrollmentSettings] = await Promise.all([
+  const [parentUser, students, years, enrollments, enrollmentSettings] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        email: true,
+        profile: {
+          select: {
+            phone: true,
+          },
+        },
+      },
+    }),
     hasStudentProfileDelegate
       ? prisma.studentProfile.findMany({
           where: { parentUserId: session.user.id },
@@ -100,11 +136,16 @@ export default async function SchoolParentPage() {
       : Promise.resolve(null),
   ]);
 
+  const childFamilyMemberByKey = new Map(childFamilyMembers.map((member) => [studentKey(member.firstName, member.lastName, member.dateOfBirth ?? ""), member]));
+
   const mappedStudents: ParentStudent[] = students.map((student) => ({
     ...student,
     dateOfBirth: student.dateOfBirth.toISOString(),
     createdAt: student.createdAt.toISOString(),
     updatedAt: student.updatedAt.toISOString(),
+    familyMemberId: childFamilyMemberByKey.get(studentKey(student.firstName, student.lastName, student.dateOfBirth))?.id ?? null,
+    email: childFamilyMemberByKey.get(studentKey(student.firstName, student.lastName, student.dateOfBirth))?.email ?? null,
+    phone: childFamilyMemberByKey.get(studentKey(student.firstName, student.lastName, student.dateOfBirth))?.phone ?? null,
   }));
 
   const mappedYears: SchoolYearOption[] = years;
@@ -147,9 +188,21 @@ export default async function SchoolParentPage() {
           description="Create student profiles, draft enrollments, edit details, and submit or withdraw as needed."
         />
         <ParentWorkspaceClient
+          currentUserId={session.user.id}
           initialStudents={mappedStudents}
           initialYears={mappedYears}
           initialEnrollments={mappedEnrollments}
+          initialParentContact={{
+            parent1: {
+              email: parentUser?.email ?? session.user.email ?? "",
+              phone: parentUser?.profile?.phone ?? "",
+            },
+            parent2: {
+              familyMemberId: spouseFamilyMember?.id ?? null,
+              email: spouseFamilyMember?.email ?? "",
+              phone: spouseFamilyMember?.phone ?? "",
+            },
+          }}
           isEnrollmentEnabled={enrollmentSettings?.isEnrollmentEnabled ?? false}
           childrenMissingDob={childrenMissingDob}
         />
