@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
+import type { ReactNode } from "react";
 import { Calendar, MapPin, Music, Mic, Users, ChevronRight, CheckCircle, AlertCircle } from "lucide-react";
 
 const PERFORMANCE_TYPES = [
@@ -54,6 +55,20 @@ const initialForm: FormData = {
   micType: "",
   additionalDetails: "",
 };
+
+function Field({ label, error, required, children }: {
+  label: string; error?: string; required?: boolean; children: ReactNode;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      {children}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
 
 export default function PerformancePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -151,18 +166,6 @@ export default function PerformancePage({ params }: { params: Promise<{ id: stri
       setStep("success");
     }
   };
-
-  const Field = ({ label, error, required, children }: {
-    label: string; error?: string; required?: boolean; children: React.ReactNode;
-  }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-    </div>
-  );
 
   const inputCls = (err?: string) =>
     `w-full px-3 py-2 border ${err ? "border-red-400" : "border-gray-300"} rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500`;
