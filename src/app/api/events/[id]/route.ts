@@ -26,6 +26,11 @@ export async function GET(
           performances: true,
         },
       },
+      rsvps: {
+        where: { attending: "YES" },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, name: true },
+      },
       items: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: { id: true, name: true, description: true, quantityNeeded: true, sortOrder: true },

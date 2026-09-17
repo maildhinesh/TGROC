@@ -37,6 +37,7 @@ interface Event {
   performanceRegDeadline: string | null;
   items: EventItem[];
   _count: { rsvps: number };
+  rsvps: { id: string; name: string }[];
 }
 
 export default function EvitePage({ params }: { params: Promise<{ id: string }> }) {
@@ -205,6 +206,16 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
                   <p className="font-semibold text-gray-900 text-sm">
                     {event._count.rsvps} {event._count.rsvps === 1 ? "person" : "people"} attending
                   </p>
+                  <details className="mt-1.5 group">
+                    <summary className="cursor-pointer text-xs font-medium text-indigo-600 hover:text-indigo-700">
+                      See who RSVPed
+                    </summary>
+                    <ul className="mt-2 space-y-1.5 text-sm text-gray-600">
+                      {event.rsvps.map((rsvp) => (
+                        <li key={rsvp.id}>{rsvp.name}</li>
+                      ))}
+                    </ul>
+                  </details>
                 </EventDetail>
               )}
               {pricing && (
