@@ -37,7 +37,7 @@ interface Event {
   performanceRegDeadline: string | null;
   items: EventItem[];
   _count: { rsvps: number };
-  rsvps: { id: string; name: string }[];
+  rsvps: { id: string; name: string; adultCount: number; kidCount: number }[];
 }
 
 export default function EvitePage({ params }: { params: Promise<{ id: string }> }) {
@@ -201,23 +201,26 @@ export default function EvitePage({ params }: { params: Promise<{ id: string }> 
               <EventDetail icon={<MapPin className="w-5 h-5 text-indigo-500" />} label="Venue" fullWidth>
                 <p className="font-semibold text-gray-900 text-sm">{event.venue}</p>
               </EventDetail>
-              {event._count.rsvps > 0 && (
-                <EventDetail icon={<Users className="w-5 h-5 text-indigo-500" />} label="Attending" fullWidth>
-                  <p className="font-semibold text-gray-900 text-sm">
-                    {event._count.rsvps} {event._count.rsvps === 1 ? "person" : "people"} attending
-                  </p>
-                  <details className="mt-1.5 group">
-                    <summary className="cursor-pointer text-xs font-medium text-indigo-600 hover:text-indigo-700">
-                      See who RSVPed
-                    </summary>
-                    <ul className="mt-2 space-y-1.5 text-sm text-gray-600">
-                      {event.rsvps.map((rsvp) => (
-                        <li key={rsvp.id}>{rsvp.name}</li>
-                      ))}
-                    </ul>
-                  </details>
-                </EventDetail>
-              )}
+              {event._count.rsvps > 0 && (() => {
+                const totalAttendees = event.rsvps.reduce((sum, rsvp) => sum + rsvp.adultCount + rsvp.kidCount, 0);
+                return (
+                  <EventDetail icon={<Users className="w-5 h-5 text-indigo-500" />} label="Attending" fullWidth>
+                    <p className="font-semibold text-gray-900 text-sm">
+                      {totalAttendees} {totalAttendees === 1 ? "person" : "people"} attending
+                    </p>
+                    <details className="mt-1.5 group">
+                      <summary className="cursor-pointer text-xs font-medium text-indigo-600 hover:text-indigo-700">
+                        See who RSVPed
+                      </summary>
+                      <ul className="mt-2 space-y-1.5 text-sm text-gray-600">
+                        {event.rsvps.map((rsvp) => (
+                          <li key={rsvp.id}>{rsvp.name} ({rsvp.adultCount + rsvp.kidCount})</li>
+                        ))}
+                      </ul>
+                    </details>
+                  </EventDetail>
+                );
+              })()}
               {pricing && (
                 <EventDetail icon={<DollarSign className="w-5 h-5 text-indigo-500" />} label="Entry Fee" fullWidth>
                   {pricing.isFree ? (

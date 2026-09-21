@@ -29,7 +29,7 @@ export async function GET(
       rsvps: {
         where: { attending: "YES" },
         orderBy: { createdAt: "asc" },
-        select: { id: true, name: true },
+        select: { id: true, name: true, adultCount: true, kidCount: true },
       },
       items: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
