@@ -54,6 +54,8 @@ interface Row {
   status: "YES" | "NO" | "MAYBE" | "NO_ACTION";
   adultCount: number;
   kidCount: number;
+  vegetarianCount: number;
+  nonVegetarianCount: number;
   notes: string | null;
   feePaid?: boolean;
   amountPaid?: string | null;
@@ -719,7 +721,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       const s = v === null ? "" : String(v);
       return `"${s.replace(/"/g, '""')}"`;
     };
-    const headers = ["Name", "Email", "Type", "Response", "Adults (15+)", "Kids (under 15)", "Items Bringing", "Notes"];
+    const headers = [
+      "Name", "Email", "Type", "Response", "Adults (15+)", "Kids (under 15)",
+      "Vegetarian", "Non-Vegetarian", "Items Bringing", "Notes",
+    ];
     const csvRows = visibleRows.map((r) => [
       escape(r.name),
       escape(r.email),
@@ -727,6 +732,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       escape(attendingLabels[r.status] ?? r.status),
       escape(r.status === "YES" ? r.adultCount : ""),
       escape(r.status === "YES" ? r.kidCount : ""),
+      escape(r.status === "YES" ? r.vegetarianCount : ""),
+      escape(r.status === "YES" ? r.nonVegetarianCount : ""),
       escape(r.items.length > 0 ? r.items.map((i) => `${i.name} x${i.quantity}`).join("; ") : ""),
       escape(r.notes),
     ].join(","));
